@@ -1,135 +1,90 @@
-# Code-complete report: review-followups-01-02, CLI error reporting and echo after commit
+# Code-complete report: review-followups-01-04, ship migrations inside the package
 
-- **Covers:** `d16e591..40bb711` on branch `feat/design-consistency-pass`
+- **Covers:** `a13fabd..d352ef6` on branch `feat/design-consistency-pass`
 - **Spec:** `docs/specs/review-followups-01/spec.md`
-- **Tickets:** review-followups-01-02 (done). This report replaces the previous review of this ticket, at `5279531` (NOT CODE COMPLETE, covering `..7bffd69`). Earlier reports: ticket 01 at `01e4f81:docs/specs/review-followups-01/report.md`, and ticket 03 at `d16e591:docs/specs/review-followups-01/report.md`. Tickets 04, 05 and 06 are open and are **not** covered here.
+- **Tickets:** review-followups-01-04 (done). Earlier reports: ticket 01 at `01e4f81:docs/specs/review-followups-01/report.md`, ticket 03 at `d16e591:docs/specs/review-followups-01/report.md`, and ticket 02 at `a13fabd:docs/specs/review-followups-01/report.md`. Tickets 05 and 06 are open and are **not** covered here.
 - **Sync:** n/a (no `external:` links)
 - **Date:** 2026-10-17
 
 ## Verdict
-**CODE COMPLETE** (ticket 01-02 only): tests assert AC-12, AC-13 and AC-18, all three axes pass, and all the gates are green. The previous review's AC-18 major is fixed. There is now a real commit-time failure, and two reviewers each confirmed independently that it fails at `dbapi_connection.commit()` and catches the old echo-inside-transaction code. Every finding left is minor.
+**CODE COMPLETE** (ticket 01-04 only): the tests assert AC-6, AC-7 and AC-8, every Config cleanup item is done, all three axes pass, and all the gates are green. Every finding is minor.
 
-The spec as a whole is not code complete until tickets 04–06 are done and reviewed.
+The spec as a whole is not code complete until tickets 05 and 06 are done and reviewed.
 
 ## Findings
 There are no blockers or majors. The minor findings are below.
 
-### Spec
-- [minor] `docs/specs/review-followups-01/spec.md:141` and `:168`. Source: AC-18, "(for example, another connection holds the SQLite write lock)", and the test-seam line, "Commit failure uses a real second SQLite connection holding `BEGIN IMMEDIATE`".
-  - The ticket's Seams were amended: a held lock fails at flush, so commit failure now comes from a deferred foreign key added by a trigger. The spec still gives the lock as its example.
-  - Nothing contradicts any criterion or D-xx, because the lock is only an example in AC-18.
-  - Fix (spec owner): change the example and the seam line to the deferred-foreign-key trigger.
-- [minor] `src/news/cli/main.py:58` and `src/news/cli/messages.py`, the `log_path is None` branch. Source: AC-13, "`… Details logged to <path>.`", and D-6, "CLI stdout carries only command output".
-  - When the log path can't be worked out (`Path.home()` fails), `cli.unexpected_error` is skipped and stderr says `No log file was open to record it.`
-  - That is the only option consistent with D-6, because structlog's default would write to stdout. It is recorded in the evidence, but not in the spec or the ticket.
-  - Fix: add one line to D-6 or to the ticket's Observability.
-- [minor] `tests/cli/test_cli.py:634`. Source: ticket Seams, "its commit fails".
-  - `assert "commit" in entry["exception"]` is a weak check, because SQLAlchemy's `commit()` autoflushes, so a flush failure would also match. The behaviour is correct today; the reviewer checked the traceback.
-  - Fix: assert on `do_commit`.
-- [minor] `tests/cli/test_cli.py:592-597`. Source: AC-18, "no row from the command persists".
-  - The `plugin` case counts `PluginRevision` rows but not `Plugin` rows. The whole transaction rolls back, so the gap is only in the assertion.
-  - Fix: count both.
-
 ### Standards
-- [minor] `docs/standards.md`, "Repo overrides". Source: the Python syntax rule, "Pick one style for multi-exception `except` clauses per repo".
-  - The repo's actual rule is whatever `ruff format` (py314) produces: no parentheses without `as`, and parentheses with `as`. The reviewer confirmed this on a scratch copy with ruff 0.17.1.
-  - The rule is written down only in the evidence, so the finding will come up again in later reviews.
-  - Fix: add a one-line override.
-- [minor] `docs/standards.md`, the stack table. Source: `standards-library.md`.
-  - The snapshot isn't stale.
-  - Typer 0.27, Pydantic 2.14 and Alembic 1.20 still have no entries, and this ticket relies on Typer internals.
-  - Fix: research a `typer.md` at 0.27, then re-run `/mobua-swe:setup`.
-- [minor] `tests/cli/test_cli.py:546, 592-605`. Source: baseline §4 (one source of truth).
-  - `WRITING_COMMANDS`, `MODEL_INSERTED_BY` and `TABLE_INSERTED_BY` repeat the same keys.
-  - Fix: use one mapping and derive the table from `__tablename__`.
-- [minor] `tests/cli/test_cli.py:450, 622, 651`. Source: baseline §4.
-  - The SQLite file path is worked out in two ways: from `database_url` in one place, and as a hard-coded `tmp_path / "news.db"` in others.
-  - Fix: add a `database_path` fixture that `database_url` builds on.
-- [minor] `src/news/cli/main.py:33`. Source: baseline readability.
-  - The comment about the vendored Click `Context` is hard to parse.
-  - Fix: reword it, e.g. "These methods receive Typer's vendored Click Context, which has no public import path, hence `Any`."
+- [minor] `src/news/migrations/env.py:29-33`. Source: baseline §6, minimal scope ("The diff matches the ticket … no drive-by changes").
+  - The new `try/finally: engine.dispose()` around the developer CLI fallback is not in the ticket's Goal or Verification.
+  - It is justified: without it, the AC-8 test raises a `ResourceWarning`. The Spec reviewer accepted it on that basis.
+  - Fix: mention it in evidence/04.md or the PR description.
+- [minor, already there before this ticket] `src/news/migrations/env.py:28`. Source: baseline §5 ("Every failure mode is either handled deliberately or fails loudly, and is logged with context").
+  - `os.environ["NEWS_DATABASE_URL"]` raises a bare `KeyError` on the developer `alembic` path when the variable is unset. It fails loudly, but without context.
+  - Fix (later ticket): raise an error that names the variable and says the root `alembic.ini` is for developer use.
+
+### Spec
+- [minor] `tests/service/test_migrations.py:42-60`. Source: AC-8, "From the repository root, Alembic's `check` command, run through the root `alembic.ini` …".
+  - Neither AC-8 test sets the working directory, so both depend on pytest being started from the repo root. They pass today because `news:migrations` resolves the same way from any directory.
+  - Fix: add `monkeypatch.chdir(REPO_ROOT)` to both tests.
+- [minor] `tests/service/test_migrations.py:31`. Source: AC-7, "upgrades a fresh SQLite database to head".
+  - The expected head comes from `ScriptDirectory.from_config(alembic_config())`, the same config the code under test uses, so a wrong `script_location` would agree with itself. The `is not None` check and the AC-6 wheel test reduce this risk.
+  - Fix (optional): also assert the known revision `d2ebcc45139c`, or build the `ScriptDirectory` from the package path.
+- [minor] `docs/standards.md:129`. Source: ticket Verification, "Config cleanup".
+  - The heading changed from `alembic/**` to `alembic.ini`. That isn't on the cleanup list, but it keeps the file consistent with the D-5 glob change.
+  - Fix: none needed. Mention it in the PR description.
 
 ### Code-complete evidence
-- [minor] `docs/specs/review-followups-01/evidence/02.md`, the deployment checklist. Source: code-complete item 7.
-  - It lacks the happy-path, unknown-Channel, unopenable-log-file and clean-venv checks.
-  - Fix: none needed in the evidence file. This report's checklist below covers them.
-- [minor] The evidence's Not verified section. Source: code-complete item 7.
-  - The review follow-ups were not run by hand. This is disclosed, and it is carried into Not verified below.
-
-### Fixed after this review
-After the review, the author fixed every minor finding except the Typer standards entry. The gates were re-run: pyright 0 errors, lint clean, 111 tests passed, and the build succeeded. These changes were **not** independently re-reviewed.
-- **Spec and ticket:** AC-18's example and the test-seam line now name the deferred-foreign-key trigger. AC-13, the spec's Observability and the ticket's Observability now describe the no-log-path case and the partial `command`.
-- **Tests:**
-  - The commit-failure test asserts `do_commit`, not just `commit`.
-  - The plugin case counts `Plugin` and `PluginRevision` rows.
-  - One `MODELS_INSERTED_BY` mapping drives both parametrized tests, and the trigger table comes from `__tablename__`.
-  - A `database_path` fixture replaces the hard-coded `tmp_path / "news.db"`.
-- **Standards:** `docs/standards.md` has a repo override saying `ruff format` decides the `except` style. The `main.py` comment about the vendored Click `Context` is reworded.
-- **Still open:** the Typer, Pydantic and Alembic standards entries. They need research and a `/mobua-swe:setup` run.
-
-The previous review's findings were all resolved except two:
-- **The parenthesized `except`:** not changed, because the formatter enforces the current style. All three reviewers accepted the reason.
-- **The Typer standards entry:** still open, as listed above.
+- [minor] `docs/specs/review-followups-01/evidence/04.md:79-84`. Source: code-complete item 7.
+  - The evidence has a "Local smoke" note but no explicit Not verified list and no deployment item of its own. The same finding came up on evidence 02.
+  - Fix: none needed in the evidence. This report's Not verified section and checklist cover it.
+- [minor] `tests/service/test_migrations.py:18-30`. Source: code-complete item 1 (test strength).
+  - The AC-7 test runs against the editable install, so `news:migrations` resolves to `src/`. It proves the code no longer depends on the working directory, but not that an installed wheel can migrate.
+  - The installed-wheel case is covered only by the AC-6 contents test and the informal smoke run. AC-7 as written is met.
+  - Fix: none for code complete. "Clean venv" stays on the deployment checklist.
 
 ## Criteria evidence
 | Criterion | Tests (names) | Happy | Failure | Boundary | Edge | Red-first | Green |
 |---|---|---|---|---|---|---|---|
-| AC-12 | `test_binding_with_invalid_config_reports_field_errors_and_saves_nothing`, `test_invalid_manifest_reports_field_errors`, `test_binding_to_an_unknown_channel_is_reported`, `test_creating_a_{channel,plugin}_for_an_unknown_reader…` (now also asserting `reader.not_found` in the file), `test_messages.py` | yes | yes: all three failure kinds, exact stderr | yes: several field errors, pointer last | yes: root field shown as `(root)` | yes | yes |
-| AC-13 | `test_an_unexpected_error_is_logged_with_its_traceback_and_reported_in_one_line`, `test_an_unexpected_error_before_the_command_runs_is_reported_the_same_way`, `test_an_error_before_the_log_file_is_known_is_reported_without_a_pointer`, `test_messages.py` | n/a: failure-only criterion | yes: lock error, callback failure, no log path | yes: one line; multi-line and empty messages; no `..` | yes: failure before dispatch (partial `command`, documented) | yes | yes |
-| AC-18 | `test_a_command_whose_commit_fails_prints_nothing_and_saves_nothing[reader,plugin,channel,bind]`, `test_a_command_that_fails_at_flush_prints_nothing_and_saves_nothing`, `test_output_is_printed_only_after_the_transaction_has_committed[reader,plugin,channel,bind]` | yes: D-9 spy across all four | yes: COMMIT failure (deferred foreign key) for all four, flush failure | yes: stdout exactly empty, row counts unchanged | n/a: `db upgrade` already echoed after commit (justified) | yes: 4 failed against e77cbe9's `main.py`; spy was red before cf8a501 | yes |
+| AC-6 | `tests/test_packaging.py::test_wheel_contains_the_migrations` | yes: real `uv build --wheel` into `tmp_path`, exactly one wheel, exact `news/migrations/env.py`, at least one `news/migrations/versions/*.py` | n/a: no inputs (justified in evidence) | n/a: no inputs | n/a | yes: AssertionError listing a wheel without `env.py` | yes |
+| AC-7 | `tests/service/test_migrations.py::test_migrate_reaches_head_outside_the_repository`; the existing `tests/service/test_schema.py` (8 tests, including the downgrade, which now uses `alembic_config()`) | yes: `chdir(tmp_path)`, fresh SQLite file, revision equals script head | n/a: no new failure paths (justified) | yes: working directory outside the repo | n/a | yes: `CommandError: Path doesn't exist: …/alembic` after the `git mv` (honestly recorded that it first passed on the old layout) | yes |
+| AC-8 | `test_root_alembic_ini_finds_no_differences_from_the_models`, `test_root_alembic_ini_reports_a_schema_the_models_do_not_describe` | yes: `command.check(Config(REPO_ROOT / "alembic.ini"))` against a migrated temporary database | yes: a stray table raises `AutogenerateDiffsDetected` matching "stray", so the happy test isn't vacuous | n/a | n/a | yes: same `CommandError`; drift test's sanity inversion recorded ("DID NOT RAISE") | yes |
+| Config cleanup | grep and diff: `ALEMBIC_INI` and `parents[3]` gone; ruff `known-third-party` removed; pyright `include = ["src", "tests"]`; core glob `alembic.ini` in `docs/mobua-swe.md` | yes | n/a | n/a | n/a | n/a: config | yes: lint and typecheck green |
 
 From commit history:
-- Tests landed with their code in c2e2153, 831400a, e77cbe9, cf8a501, 1b01f07 and 804bfc1.
-- ae17387 and cc43eeb are tests only, covering behaviour already built. Their reds came from the old code and from a temporary mutation; the Evidence reviewer re-ran both and got the same results.
-- f7c67bf is a refactor covered by the AC-12 tests.
-- No tests were deleted, weakened or skipped.
+- The tests landed with their code in f033bc0, which meets "before or with".
+- In 1adf2ec, the only test change is import order in `test_migrations.py`, which follows from dropping ruff's `known-third-party`.
+- No tests were deleted, weakened or skipped. There is no `skip` or `xfail` anywhere in `tests/`.
 
-Mocks and seams:
-- Commit and flush failures run against real SQLite.
-- The `typer.echo` spy calls through to the real function.
-- `pwd.getpwuid` is patched only at the OS user-database boundary, and raises `KeyError` as the real function does.
+Mocks and seams: there are no mocks. The wheel build is a real `uv build`. Alembic runs real `upgrade`, `check` and `downgrade`. SQLite uses real files in `tmp_path`. Each boundary has a real integration test.
 
 ## Gates
 | Gate | Command | Result |
 |---|---|---|
 | Typecheck | `uv run pyright` | pass (0 errors) |
-| Lint | `uv run ruff check . && uv run ruff format --check . && uv run lint-imports` | pass (111 files formatted, 1 contract kept) |
-| Full suite | `uv run pytest` | pass (111 tests, none skipped) |
-| Build | `uv build` | pass (wheel and sdist) |
+| Lint | `uv run ruff check . && uv run ruff format --check . && uv run lint-imports` | pass (114 files formatted, 1 contract kept) |
+| Full suite | `uv run pytest` | pass (115 tests, none skipped) |
+| Build | `uv build` | pass. The wheel has `news/migrations/env.py`, `script.py.mako` and the `d2ebcc45139c` revision; the sdist has them under `src/news/migrations/`. |
 
 ## Observability delivered
-- **Logs:** `error` `cli.unexpected_error` (`command`, `exc_info` rendered as `exception`) from `cli/main.py`, written to the CLI log file (D-6).
-  - Tested for its level, its command, a traceback in the file, and its absence from the terminal.
-  - Skipped, with stderr saying so, when no log path is known.
-  - Expected failures rely on the service events from ticket 03. `reader.not_found` reaching the CLI log file is now asserted.
+- **Logs:** none. The ticket says "None. This is packaging only." Alembic's errors propagate unchanged, and the only new code path, `engine.dispose()` in a `finally`, is not a failure path.
 - **Metrics:** none, as the spec requires (D-15).
 
 ## Not verified
 Code complete is not deployment verified. This review did **not** verify:
 - Deployment, runtime behavior in the target environment, or real traffic and data.
-- The installed `news` binary from a wheel or a container. The evidence's hand checks ran from a source checkout only.
-- The review follow-ups by hand: the commit-time failure, the error before the log path is known, and the unknown-Reader log line. They are covered by tests only.
-- A real commit failure in production. In practice that would be disk-full or I/O errors at COMMIT, which the tests simulate with a deferred foreign key.
-- Anything in tickets 04–06.
+- `news db upgrade` from an installed wheel, except one informal smoke run on the author's macOS machine (fresh 3.14 venv outside the repo: "Database is up to date.", exit 0, `alembic_version` = `d2ebcc45139c`). The tests use the editable install.
+- Anything in a container image, which is out of scope for this ticket.
+- Anything on Postgres, which is out of scope for this ticket.
+- The developer `alembic` CLI run by hand through the root `alembic.ini`. It is covered by tests only.
+- Anything in tickets 05 and 06.
 
 ## Deployment verification checklist
 Check these by hand or in the observability system, to confirm the deployed change does what the spec and ticket intend.
 
-- [ ] **CLI, invalid bind:** run `news channel bind --reader <id> --channel <id> --plugin-revision <id> --config '{}'`.
-  - stderr: the field error line(s), then `Logged to <path>.`
-  - stdout: empty. Exit code: 1.
-  - `tail -1 <cli.log> | jq .event` shows `"channel_revision.rejected"`.
-- [ ] **CLI, unknown Reader:** run `news channel create --reader <random uuid> X`.
-  - stderr: exactly `no Reader <id>`, then `Logged to <path>.` No traceback.
-  - Exit code: 1.
-  - `tail -1 <cli.log> | jq .event` shows `"reader.not_found"`.
-- [ ] **CLI, unknown Channel:** run `news channel bind` with a random `--channel`.
-  - stderr: `no Channel … for this Reader`, then `Logged to <path>.`
-  - Exit code: 1.
-- [ ] **CLI, unexpected error:** in another shell, run `sqlite3 x.db` and enter `BEGIN IMMEDIATE;`, leaving it open. Then run `news --database-url sqlite:///x.db reader create A`.
-  - stderr: one `Unexpected error: OperationalError: … Details logged to <path>.` line. stdout: empty. Exit code: 1.
-  - `jq 'select(.event=="cli.unexpected_error") | .level,.command' <cli.log>` shows `"error"` and `"reader create"`, and the entry's `exception` holds a traceback.
-  - After the lock is released, `sqlite3 x.db "select count(*) from reader where name='A'"` returns 0.
-- [ ] **CLI, happy path (D-9):** `news reader create A` prints the new id only once the command returns, and `sqlite3 x.db "select count(*) from reader where name='A'"` returns 1.
-- [ ] **CLI, unopenable log file** (`mkdir -m 500 /tmp/ro && NEWS_CLI_LOG_FILE=/tmp/ro/logs/cli.log news reader create A`, as a non-root user): exits 1 before any database write, naming the path and the override.
-- [ ] **Clean venv** (`uv build`, `pip install dist/*.whl`, then the checks above): same results as from a source checkout.
+- [ ] **Clean venv:** `uv build`, then `pip install dist/*.whl` into a fresh venv outside the repo, then `news --database-url sqlite:///x.db db upgrade`.
+  - It succeeds without a source checkout.
+  - `sqlite3 x.db "select version_num from alembic_version"` returns `d2ebcc45139c`.
+  - Running `db upgrade` again prints `Database is up to date.` and exits 0.
+- [ ] **Clean venv, CLI checks:** from the same venv, the ticket-02 checks (`a13fabd:docs/specs/review-followups-01/report.md`) give the same results as from a source checkout.
+- [ ] **Developer path:** from the repo root, with `NEWS_DATABASE_URL` pointing at a migrated database, `uv run alembic check` reports `No new upgrade operations detected.`

@@ -126,7 +126,7 @@ TypeScript 7.0 (the Go-native compiler, released 2026-07-08) has no programmatic
 
 These rules apply to this repo and take precedence over the library sections above.
 
-### core (`src/news/**`, `tests/**`, `alembic/**`)
+### core (`src/news/**`, `tests/**`, `alembic.ini`)
 - Target Python 3.14 (`requires-python = ">=3.14"`) and manage dependencies and the venv with uv.
 - Lint and format with ruff; type-check with pyright.
 - Multi-exception `except` style is whatever `ruff format` (target py314) produces: `except A, B:` without `as`, `except (A, B) as error:` with it.

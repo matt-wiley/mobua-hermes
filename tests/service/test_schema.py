@@ -2,11 +2,10 @@
 
 from alembic import command
 from alembic.autogenerate import compare_metadata
-from alembic.config import Config
 from alembic.migration import MigrationContext
 from sqlalchemy import Engine, inspect, text
 
-from news.service.db import ALEMBIC_INI
+from news.service.db import alembic_config
 from news.service.models import READER_SCOPE_EXEMPT_TABLES, Base
 
 CHANNEL_TABLES = {"channel", "channel_revision"}
@@ -77,7 +76,7 @@ def test_sqlite_enforces_foreign_keys(engine: Engine) -> None:
 
 
 def test_migration_downgrades_to_an_empty_database(engine: Engine) -> None:
-    config = Config(ALEMBIC_INI)
+    config = alembic_config()
     with engine.begin() as connection:
         config.attributes["connection"] = connection
         command.downgrade(config, "base")

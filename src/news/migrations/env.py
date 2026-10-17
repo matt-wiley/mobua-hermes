@@ -26,8 +26,11 @@ def main() -> None:
         run_migrations(connection)
         return
     engine = create_engine_for(os.environ["NEWS_DATABASE_URL"])
-    with engine.begin() as own_connection:
-        run_migrations(own_connection)
+    try:
+        with engine.begin() as own_connection:
+            run_migrations(own_connection)
+    finally:
+        engine.dispose()
 
 
 main()

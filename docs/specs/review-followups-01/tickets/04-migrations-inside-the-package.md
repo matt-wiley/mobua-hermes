@@ -1,7 +1,7 @@
 ---
 id: review-followups-01-04
 title: Ship migrations inside the package
-status: todo
+status: done
 blocked_by: []
 external: null
 ---

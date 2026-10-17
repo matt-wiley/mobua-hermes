@@ -1,14 +1,10 @@
 """Database engine and migrations (ADR 0013: SQLite by default, Postgres-ready)."""
 
-from pathlib import Path
 from typing import Any
 
 from alembic import command
 from alembic.config import Config
 from sqlalchemy import Engine, create_engine, event
-
-# The Alembic project lives at the repository root, next to src/.
-ALEMBIC_INI = Path(__file__).resolve().parents[3] / "alembic.ini"
 
 
 def create_engine_for(url: str) -> Engine:
@@ -27,8 +23,15 @@ def _configure_sqlite_connection(dbapi_connection: Any, _record: Any) -> None:
     cursor.close()
 
 
+def alembic_config() -> Config:
+    # Built in code from the package, so an installed wheel migrates without a source checkout.
+    config = Config()
+    config.set_main_option("script_location", "news:migrations")
+    return config
+
+
 def migrate(engine: Engine) -> None:
-    config = Config(ALEMBIC_INI)
+    config = alembic_config()
     with engine.begin() as connection:
         config.attributes["connection"] = connection
         command.upgrade(config, "head")

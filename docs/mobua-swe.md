@@ -15,7 +15,7 @@ observability:
   where_to_look: "`docker logs <container>`; GET /metrics; Channel Health in the Web App"
 modules:
   - name: core
-    glob: "{src/news/**,tests/**,alembic/**,pyproject.toml,uv.lock}"
+    glob: "{src/news/**,tests/**,alembic.ini,pyproject.toml,uv.lock}"
     language: python
     framework: fastapi
     versions: {python: "3.14", fastapi: "0.143", sqlalchemy: "2.1", alembic: "1.20", typer: "0.27", pydantic: "2.14"}
