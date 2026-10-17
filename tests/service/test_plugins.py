@@ -7,7 +7,7 @@ from news.service.manifest import PluginRevisionRejected
 from news.service.models import Plugin, PluginRevision
 from news.service.plugins import create_plugin
 from news.service.revisions import SYSTEM_CREATOR, creator_of
-from tests.service.factories import URL_PLUGIN_MANIFEST, a_reader
+from tests.service.factories import URL_PLUGIN_MANIFEST, a_built_in_plugin_revision, a_reader
 
 
 def test_created_plugin_is_owned_by_the_reader_with_a_first_revision(session: Session) -> None:
@@ -40,6 +40,18 @@ def test_revision_created_by_a_reader_records_that_readers_id(session: Session) 
 def test_revision_created_without_a_reader_records_system_as_creator() -> None:
     """AC-5, seeding path: seeding itself is ticket 05, so the creator rule is tested directly."""
     assert creator_of(None) == SYSTEM_CREATOR == "system"
+
+
+def test_built_in_revision_reads_back_as_system_created_with_no_reader(session: Session) -> None:
+    """AC-21."""
+    revision = a_built_in_plugin_revision(session)
+    session.commit()
+    session.expire_all()
+
+    stored = session.get_one(PluginRevision, revision.id)
+    assert stored.created_by == "system"
+    assert stored.reader_id is None
+    assert session.get_one(Plugin, stored.plugin_id).reader_id is None
 
 
 def test_plugin_with_an_invalid_manifest_is_rejected_and_not_saved(session: Session) -> None:

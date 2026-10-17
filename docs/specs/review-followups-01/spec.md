@@ -106,7 +106,9 @@ It lands on `feat/design-consistency-pass` before design-consistency-pass-02 sta
   - a `reader` table without `reader_id`, except `reader`, whose `id` is its Reader id;
   - a `channel` table without `channel_id`, except `channel`, whose `id` is its Channel id;
   - an undeclared table;
-  - a table with a foreign key to a `channel` table that is not itself declared `channel`.
+  - a table with a foreign key to a `channel` table that is not itself declared `channel`;
+  - a `channel` table without `reader_id`, since Channel records also carry their Reader id (ADR 0007). *Amended 2026-10-17 after the ticket 05 review.*
+  - a declared scope other than `app`, `reader` or `channel` (D-3). *Amended 2026-10-17 after the ticket 05 review.*
 
   For a clean schema they report no violations.
 - **AC-3:** The migrated database has no scope violations under AC-2's rules, and `READER_SCOPE_EXEMPT_TABLES` no longer exists.

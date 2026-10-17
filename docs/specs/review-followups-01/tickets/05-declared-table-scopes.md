@@ -1,7 +1,7 @@
 ---
 id: review-followups-01-05
 title: Declared table scopes and schema rules
-status: todo
+status: done
 blocked_by: [review-followups-01-04]
 external: null
 ---

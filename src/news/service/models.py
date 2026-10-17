@@ -1,21 +1,24 @@
 """The revisioned Channel and Plugin records (ADRs 0016, 0018, 0019).
 
-Every table carries a Reader id (ADR 0007). Plugin and Plugin Revision rows of Built-in Plugins
-leave it empty (ADR 0019). Rows that belong to a Channel also carry its Channel id.
+Every table declares its scope in `Table.info`: `app`, `reader` or `channel` (ADR 0007).
+A `reader` table carries a Reader id, and a `channel` table carries a Channel id as well.
+The `reader` and `channel` tables are scoped by their own `id`. Plugin and Plugin Revision rows
+of Built-in Plugins leave the Reader id empty (ADR 0019). The schema tests check these rules.
 """
 
 import uuid
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, Literal
 
 from sqlalchemy import JSON, DateTime, ForeignKey, MetaData, Text, UniqueConstraint
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
-# Tables with no Reader id, and why. Everything else must have one (AC-53).
-READER_SCOPE_EXEMPT_TABLES: dict[str, str] = {
-    "alembic_version": "app-wide schema version, holds no Reader data",
-    "reader": "the Reader identity itself; its id is the Reader id",
-}
+type Scope = Literal["app", "reader", "channel"]
+
+
+def scoped(scope: Scope) -> dict[str, Any]:
+    """Table arguments declaring a table's scope; a fresh dict, since tables keep it as `info`."""
+    return {"info": {"scope": scope}}
 
 
 def _utcnow() -> datetime:
@@ -37,6 +40,7 @@ class Base(DeclarativeBase):
 
 class Reader(Base):
     __tablename__ = "reader"
+    __table_args__ = scoped("reader")
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid7)
     name: Mapped[str]
@@ -45,6 +49,7 @@ class Reader(Base):
 
 class Plugin(Base):
     __tablename__ = "plugin"
+    __table_args__ = scoped("reader")
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid7)
     # Empty for Built-in Plugins, which are system-owned (ADR 0019).
@@ -62,7 +67,7 @@ class Plugin(Base):
 
 class PluginRevision(Base):
     __tablename__ = "plugin_revision"
-    __table_args__ = (UniqueConstraint("plugin_id", "number"),)
+    __table_args__ = (UniqueConstraint("plugin_id", "number"), scoped("reader"))
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid7)
     plugin_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("plugin.id"))
@@ -79,6 +84,7 @@ class PluginRevision(Base):
 
 class Channel(Base):
     __tablename__ = "channel"
+    __table_args__ = scoped("channel")
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid7)
     reader_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("reader.id"), index=True)
@@ -95,7 +101,7 @@ class Channel(Base):
 
 class ChannelRevision(Base):
     __tablename__ = "channel_revision"
-    __table_args__ = (UniqueConstraint("channel_id", "number"),)
+    __table_args__ = (UniqueConstraint("channel_id", "number"), scoped("channel"))
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid7)
     channel_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("channel.id"))
@@ -109,6 +115,7 @@ class ChannelRevision(Base):
 
 class PluginBinding(Base):
     __tablename__ = "plugin_binding"
+    __table_args__ = scoped("channel")
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid7)
     channel_revision_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("channel_revision.id"))
