@@ -2,21 +2,14 @@
 
 import re
 from collections.abc import Iterator
-from dataclasses import dataclass
 from typing import Any, cast
 
 from jsonschema import Draft202012Validator, ValidationError
 
-
-@dataclass(frozen=True, order=True)
-class ConfigError:
-    """One problem with a Binding's config, located by its dotted field path ("" is the root)."""
-
-    field: str
-    message: str
+from news.service.validation import FieldError
 
 
-def validate_binding_config(schema: dict[str, Any], config: Any) -> list[ConfigError]:
+def validate_binding_config(schema: dict[str, Any], config: Any) -> list[FieldError]:
     validator = Draft202012Validator(schema)
     # types-jsonschema leaves one iter_errors overload partially unknown.
     iter_errors = validator.iter_errors  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType]
@@ -29,20 +22,22 @@ def validate_binding_config(schema: dict[str, Any], config: Any) -> list[ConfigE
     return sorted(errors)
 
 
-def _field_errors(error: ValidationError) -> Iterator[ConfigError]:
+def _field_errors(error: ValidationError) -> Iterator[FieldError]:
     # jsonschema reports "required" and "additionalProperties" on the parent object, but the
     # Reader needs to see which field is missing or unexpected.
     parent = [str(part) for part in error.absolute_path]
     if error.validator == "required":
         for name in _missing_fields(error):
-            yield ConfigError(_join(parent, name), f"'{name}' is a required property")
+            yield FieldError(_join(parent, name), f"'{name}' is a required property")
     elif error.validator == "additionalProperties" and error.validator_value is False:
         for name in _unexpected_fields(error):
-            yield ConfigError(_join(parent, name), f"'{name}' is not an allowed field")
+            yield FieldError(_join(parent, name), f"'{name}' is not an allowed field")
     else:
-        yield ConfigError(_join(parent), error.message)
+        yield FieldError(_join(parent), error.message)
 
 
+# jsonschema reports "required" and "additionalProperties" only on object instances, so the
+# instance in these errors is always a dict.
 def _missing_fields(error: ValidationError) -> list[str]:
     instance = cast(dict[str, Any], error.instance)
     required = cast(list[str], error.validator_value)

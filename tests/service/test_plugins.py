@@ -1,8 +1,9 @@
 import pytest
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
+from structlog.testing import capture_logs
 
-from news.service.manifest import ManifestError
+from news.service.manifest import PluginRevisionRejected
 from news.service.models import Plugin, PluginRevision
 from news.service.plugins import create_plugin
 from news.service.revisions import SYSTEM_CREATOR, creator_of
@@ -44,8 +45,43 @@ def test_revision_created_without_a_reader_records_system_as_creator() -> None:
 def test_plugin_with_an_invalid_manifest_is_rejected_and_not_saved(session: Session) -> None:
     reader = a_reader(session)
 
-    with pytest.raises(ManifestError):
+    with pytest.raises(PluginRevisionRejected):
         create_plugin(session, reader.id, 'name = "broken', {"main.py": ""})
 
     assert session.scalar(select(func.count()).select_from(Plugin)) == 0
     assert session.scalar(select(func.count()).select_from(PluginRevision)) == 0
+
+
+def test_rejected_manifest_is_logged_with_the_reader_and_errors(session: Session) -> None:
+    """AC-15."""
+    reader = a_reader(session)
+    zero_timeout = URL_PLUGIN_MANIFEST.replace("timeout = 60", "timeout = 0")
+
+    with capture_logs() as logs, pytest.raises(PluginRevisionRejected) as raised:
+        create_plugin(session, reader.id, zero_timeout, {"main.py": ""})
+
+    assert not session.new
+    assert session.scalar(select(func.count()).select_from(Plugin)) == 0
+    assert session.scalar(select(func.count()).select_from(PluginRevision)) == 0
+    assert logs == [
+        {
+            "event": "plugin_revision.rejected",
+            "log_level": "info",
+            "reader_id": str(reader.id),
+            "errors": [
+                {"field": "timeout", "message": "Input should be greater than 0"},
+            ],
+        }
+    ]
+    assert [error.field for error in raised.value.errors] == ["timeout"]
+
+
+def test_malformed_manifest_is_logged_with_its_root_error(session: Session) -> None:
+    reader = a_reader(session)
+
+    with capture_logs() as logs, pytest.raises(PluginRevisionRejected):
+        create_plugin(session, reader.id, 'name = "broken', {"main.py": ""})
+
+    [event] = logs
+    assert event["event"] == "plugin_revision.rejected"
+    assert [error["field"] for error in event["errors"]] == [""]

@@ -374,3 +374,40 @@ def test_a_log_file_path_that_is_a_directory_is_reported(
     assert result.exit_code == 1
     assert str(path) in result.stderr
     assert not database.exists()
+
+
+def test_creating_a_channel_for_an_unknown_reader_is_reported_without_a_traceback(
+    database_url: str,
+) -> None:
+    unknown = str(uuid.uuid7())
+
+    result = news(database_url, "channel", "create", "--reader", unknown, "Local")
+
+    assert result.exit_code == 1
+    assert result.stderr.splitlines()[0] == f"no Reader {unknown}"
+    assert result.stdout == ""
+    assert isinstance(result.exception, SystemExit)
+
+
+def test_creating_a_plugin_for_an_unknown_reader_is_reported_without_a_traceback(
+    database_url: str, plugin_files: tuple[Path, Path]
+) -> None:
+    manifest, code = plugin_files
+    unknown = str(uuid.uuid7())
+
+    result = news(
+        database_url,
+        "plugin",
+        "create",
+        "--reader",
+        unknown,
+        "--manifest",
+        str(manifest),
+        "--code",
+        str(code),
+    )
+
+    assert result.exit_code == 1
+    assert result.stderr.splitlines()[0] == f"no Reader {unknown}"
+    assert result.stdout == ""
+    assert isinstance(result.exception, SystemExit)

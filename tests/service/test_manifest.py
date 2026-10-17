@@ -1,6 +1,6 @@
 import pytest
 
-from news.service.manifest import ManifestError, parse_manifest
+from news.service.manifest import PluginRevisionRejected, parse_manifest
 
 VALID = """
 name = "rss"
@@ -38,7 +38,7 @@ def test_secrets_default_to_empty() -> None:
 
 
 def test_malformed_toml_is_rejected() -> None:
-    with pytest.raises(ManifestError) as raised:
+    with pytest.raises(PluginRevisionRejected) as raised:
         parse_manifest('name = "rss')
 
     assert raised.value.errors[0].field == ""
@@ -47,14 +47,14 @@ def test_malformed_toml_is_rejected() -> None:
 def test_missing_config_schema_is_rejected_naming_the_field() -> None:
     manifest_without_schema = VALID.split("[config_schema]")[0]
 
-    with pytest.raises(ManifestError) as raised:
+    with pytest.raises(PluginRevisionRejected) as raised:
         parse_manifest(manifest_without_schema)
 
     assert [error.field for error in raised.value.errors] == ["config_schema"]
 
 
 def test_config_schema_that_is_not_a_valid_json_schema_is_rejected() -> None:
-    with pytest.raises(ManifestError) as raised:
+    with pytest.raises(PluginRevisionRejected) as raised:
         parse_manifest(VALID.replace('type = "object"', "type = 12"))
 
     assert [error.field for error in raised.value.errors] == ["config_schema"]
@@ -62,7 +62,7 @@ def test_config_schema_that_is_not_a_valid_json_schema_is_rejected() -> None:
 
 @pytest.mark.parametrize("timeout", [0, -5])
 def test_timeout_must_be_positive(timeout: int) -> None:
-    with pytest.raises(ManifestError) as raised:
+    with pytest.raises(PluginRevisionRejected) as raised:
         parse_manifest(VALID.replace("timeout = 60", f"timeout = {timeout}"))
 
     assert [error.field for error in raised.value.errors] == ["timeout"]
@@ -73,7 +73,7 @@ def test_minimum_timeout_of_one_second_is_accepted() -> None:
 
 
 def test_empty_command_is_rejected() -> None:
-    with pytest.raises(ManifestError) as raised:
+    with pytest.raises(PluginRevisionRejected) as raised:
         parse_manifest(VALID.replace('command = "python main.py"', 'command = ""'))
 
     assert [error.field for error in raised.value.errors] == ["command"]

@@ -1,73 +1,72 @@
-# Code-complete report: review-followups-01-01, CLI writes its logs to a file
+# Code-complete report: review-followups-01-03, error types, service failure logging, and the Reader check
 
-- **Covers:** `945315f..766f589` on branch `feat/design-consistency-pass`
+- **Covers:** `01e4f81..ea17703` on branch `feat/design-consistency-pass`
 - **Spec:** `docs/specs/review-followups-01/spec.md`
-- **Tickets:** review-followups-01-01 (done). Tickets 02–06 are open and are **not** covered by this report.
+- **Tickets:** review-followups-01-03 (done). Ticket 01 was reviewed earlier: its report is at `01e4f81:docs/specs/review-followups-01/report.md`. Tickets 02, 04, 05 and 06 are open and are **not** covered by this report.
 - **Sync:** n/a (no `external:` links)
 - **Date:** 2026-10-17
 
 ## Verdict
-**CODE COMPLETE** (ticket 01-01 only): AC-9, AC-10, AC-11 and AC-14 are met by tests that assert them, all three axes pass, and the gates are green. All findings are minor.
+**CODE COMPLETE** (ticket 01-03 only): tests assert AC-15, AC-16, AC-17 and AC-19, the D-13 checks hold, all three axes pass, and the gates are green. All findings are minor.
 
-The spec as a whole is not code complete until tickets 02–06 are done and reviewed.
+The spec as a whole is not code complete until tickets 02 and 04–06 are done and reviewed.
 
 ## Findings
 There are no blockers or majors. The minor findings are listed below.
 
 ### Standards
-- [minor] `src/news/cli/main.py:56-75`: baseline §5 and spec D-6 ("fails fast before any work"). The group callback runs before a subcommand's `--help` is parsed. So `news db upgrade --help` creates the log directory and file, and with an unopenable path, `--help` exits 1. This was reproduced with `NEWS_CLI_LOG_FILE=/dev/null/x news db upgrade --help`, and shell completion is affected the same way. Fix: return early from `main` when `ctx.resilient_parsing` is set, and decide whether `--help` should open the log at all.
-- [minor] `src/news/cli/main.py:52`: baseline §4 (use the existing idiom). The default is written into the `help` text by hand. Fix: use `show_default="$XDG_STATE_HOME/news/cli.log"`.
-- [minor] `docs/mobua-swe.md:11-13`: repo config vs D-6. The `observability.logging` entry still says "JSON to stdout", and `where_to_look` doesn't mention the CLI log file. The `commands_verified` comment says 53 tests; there are now 70. Fix: update it in a separate change, or re-run `/mobua-swe:setup`.
-- [minor] `docs/standards.md` snapshot: baseline §4. Typer 0.27 and structlog 26.1 are direct dependencies with no standards library entry. Fix: add `typer` and `structlog` entries, then re-run `/mobua-swe:setup`. The snapshot is not stale: it was taken 2026-10-16 and matches `uv.lock`, and the hold on Python 3.14 is documented.
+- [minor] `src/news/service/binding_config.py:39`: baseline §1 (comments say why). The D-13 comment sits above `_missing_fields`, but it also explains the `cast(dict[str, Any], error.instance)` in `_unexpected_fields`. It also partly repeats the comment at lines 26-27. Fix: say in the comment that it covers both helpers. That keeps the ticket's "one comment" rule.
+- [minor] `src/news/service/validation.py:19` and `src/news/cli/main.py:87`: baseline §1 and §4 (no duplicated logic). `error.field or '(root)'` is formatted in two places, so the CLI output and the exception message could drift apart. Fix: in ticket 02 (spec D-10), have `_fail` reuse the base class's formatting. The evidence already defers it there.
+- [minor, adjacent, pre-existing] `src/news/service/channels.py:63-67`: baseline Observability. `channel_revision.rejected` logs `channel_id` and `errors` but not `reader_id`. The new events all include `reader_id`, so the rejection events are now inconsistent. This is out of scope for this ticket. Fix: open a follow-up.
+- Standards snapshot: not stale. `docs/standards.md` (2026-10-16) matches `docs/mobua-swe.md` and `uv.lock`. As the ticket 01 report already noted, structlog 26.1, Typer 0.27 and jsonschema 4.26 have no library entries. Fix: add them the next time `/mobua-swe:setup` runs.
 
 ### Spec
-- [minor] `src/news/cli/main.py:70`: D-6 says the message "names the path, the OS error and the override". `error.strerror` can be `None` for an OSError with no errno, which would print "None". Fix: `error.strerror or str(error)`.
-- [minor] `src/news/cli/log_file.py:10-13`: AC-9 says "With neither set, they go to `$XDG_STATE_HOME/news/cli.log`". The resolver also ignores an empty or relative `XDG_STATE_HOME`. This follows the XDG Base Directory spec, but the spec doesn't record it. Fix: add a line to D-6.
-- [minor, pre-existing, not this diff] Nothing in `src/` outside the CLI calls `configure_logging()`, so the server process never configures structlog. The deployment check "`docker logs`: server JSON lines on stdout, as before" depends on the server doing that. Fix: confirm or add server logging setup, likely with the container work.
+- [minor] `src/news/service/validation.py:19`: spec AC-19, "Each has the message `"<field>: <message>"`, joined with `"; "`". The ticket's Verification asks for "an empty `field` shown at the root", and the code does that: `str(exception)` now renders `(root)` where it used to render `": <message>"`. The spec's AC-19 doesn't mention `(root)`, so the spec and the ticket disagree. The evidence discloses the change, and it is tested. Fix: add the `(root)` rule to AC-19. No code change.
+- [minor] `src/news/service/plugins.py:28`: spec D-7, "the service layer logs rejected user input at `info`, where the rejection is raised". `PluginRevisionRejected` is raised in the pure `parse_manifest`, but `create_plugin` catches it, logs it and re-raises it, because only `create_plugin` has the `reader_id`. This is justified and recorded in the evidence. Fix: none needed. Optionally, note this placement in D-7.
 
 ### Code-complete evidence
-- [minor] `tests/cli/test_cli.py:332-354` (`read_only_dir`): ticket Seams, and the spec checklist line "As root, permissions don't block". Nothing protects this test when it runs as root, so in a root CI container it fails instead of skipping. Fix: `pytest.mark.skipif(os.geteuid() == 0, ...)`.
-- [minor] `tests/cli/test_cli.py:345-354`: the ticket says "Assert the database file was not created **or changed**". Only "not created" is tested. Fix: add a case against an existing database whose bytes stay unchanged, or justify in the evidence why "not created" is enough.
-- [minor] `tests/cli/test_cli.py:357-370` (`test_a_log_file_path_that_is_a_directory_is_reported`): AC-11 is under-asserted. The test doesn't check the OS error text, the override names, or empty stdout. Fix: add those three assertions.
-- [minor] `tests/cli/test_cli.py:290-320` (the XDG default and `~/.local/state` fallback tests): neither checks `exit_code` or stdout. Fix: assert both.
-- [minor] An empty `NEWS_CLI_LOG_FILE=""` is untested. A manual run shows it falls back to the XDG path. Fix: pin that with a CLI test.
-- [minor] `docs/specs/review-followups-01/evidence/01.md`: the evidence names the deployment checks the ticket feeds, but lists none. This report's checklist fills that gap.
+- [minor] `tests/cli/test_cli.py:379-413`: an evidence gap for the deployment check "CLI, unknown Reader … The log file has `reader.not_found`". The two CLI unknown-Reader tests check the exit code, stderr, empty stdout and `SystemExit`. They don't check that `reader.not_found` reaches the CLI log file. Fix: assert `[line["event"] for line in log_lines(log_file)] == ["reader.not_found"]`, here or in ticket 02.
+- [minor] `docs/specs/review-followups-01/evidence/03.md:84-91`: code-complete item 2 (red for the right reason). Two of the four AC-17 service red failures are `NotImplementedError` from the stub. That is weaker than an assertion failure. The `IntegrityError` failures do show the missing check, so this is acceptable. Fix: none. Next time, a no-op stub would show that rows were written.
 
 ## Criteria evidence
 | Criterion | Tests (names) | Happy | Failure | Boundary | Edge | Red-first | Green |
 |---|---|---|---|---|---|---|---|
-| AC-9 | `test_log_file.py`: 6 resolver tests. `test_cli.py`: `test_the_log_file_option_wins_over_the_environment`, `test_log_lines_go_to_the_file_named_by_the_environment_and_stdout_has_none`, `test_logs_default_to_the_xdg_state_directory`, `test_logs_fall_back_to_local_state_under_home_without_xdg_state_home` | yes | under AC-11 (justified) | yes: empty or relative XDG, relative explicit path. Empty env var is untested (minor). | yes: a missing directory is created in every CLI case | yes | yes |
-| AC-10 | `test_logs_go_to_the_given_stream_and_not_stdout`, `test_log_lines_go_to_the_file_named_by_the_environment_and_stdout_has_none`, `test_a_second_command_appends_to_the_log_file`; `created_id` reads the whole of stdout | yes | n/a: write-after-open failure is out of scope (justified) | yes: `stdout == ""` | yes: a second run appends and keeps the first line | yes | yes |
-| AC-11 | `test_an_unopenable_log_file_fails_before_touching_the_database`, `test_a_log_file_path_that_is_a_directory_is_reported` | via AC-9/10 | yes: EACCES and EISDIR | partly: "database not changed" is untested (minor) | root run unguarded (minor) | yes | yes |
-| AC-14 | `test_logs_are_json_lines_on_stdout` (unchanged) | yes | n/a (justified) | n/a (justified) | stream variant under AC-10 | n/a: regression guard (justified) | yes |
+| AC-15 | `test_plugins.py`: `test_rejected_manifest_is_logged_with_the_reader_and_errors`, `test_malformed_manifest_is_logged_with_its_root_error`, `test_plugin_with_an_invalid_manifest_is_rejected_and_not_saved` | yes: the existing create tests log nothing | yes: schema rejection and TOML parse failure | yes: timeout boundaries in `test_manifest.py` | yes: root-level error | yes | yes |
+| AC-16 | `test_channels.py`: `test_an_unknown_channel_is_not_found_and_logged`, `test_another_readers_channel_is_not_found_and_logged`, `test_another_readers_channel_cannot_be_revised`. `test_cli.py`: `test_binding_to_an_unknown_channel_is_reported` | yes: a found Channel logs nothing (asserted exactly) | yes: both not-found paths, both through `_get_channel` | n/a: no range to bound (justified) | n/a (justified) | yes | yes |
+| AC-17 | `test_readers.py`: 5 tests. `test_cli.py`: `test_creating_a_{channel,plugin}_for_an_unknown_reader_is_reported_without_a_traceback` | yes | yes: in the service and in both CLI commands | yes: `not session.new` and row counts are 0 | n/a: Typer rejects malformed UUIDs (justified) | yes (2 of 4 service reds are stub `NotImplementedError`, minor) | yes |
+| AC-19 | `test_validation.py`: 8 tests. The renamed tests in `test_binding_config.py`, `test_manifest.py`, `test_channels.py` and `test_plugins.py`. A grep finds no `ConfigError` or `ManifestError` | yes | n/a: value types with no failure path (justified) | yes: one error, zero errors | yes: an empty field shown as `(root)` | yes | yes |
+| D-13 | Checked in review: `cli/main.py:98` uses `cast` with no ignore, and `binding_config.py:39` has the comment. The only remaining `pyright: ignore` is the commented `iter_errors` one | n/a | n/a | n/a | n/a | n/a: refactor covered by the existing `_parse_config` tests | yes |
 
-From commit history: tests landed in the same commits as their code (6b3a269, 9fa25af, 3e5db56), and no production code came first. The red-first runs are recorded in `evidence/01.md`. No tests were deleted, weakened or skipped. The only change to an existing assertion, `created_id`, is stricter.
+From commit history: each test landed in the same commit as its code (b8ed188, 349f097, 3bc04fb, de53202). b032859 is a refactor covered by the existing tests. No tests were deleted, weakened or skipped. The changes to `tests/` are renames and additions only. There are no mocks: the service tests run on migrated SQLite, and the CLI tests use `CliRunner` against a real database.
 
 ## Gates
 | Gate | Command | Result |
 |---|---|---|
 | Typecheck | `uv run pyright` | pass (0 errors) |
 | Lint | `uv run ruff check . && uv run ruff format --check . && uv run lint-imports` | pass (1 import contract kept) |
-| Full suite | `uv run pytest` | pass (70 tests, none skipped) |
+| Full suite | `uv run pytest` | pass (89 tests, none skipped) |
 
 ## Observability delivered
-- **Logs:** the CLI appends structlog JSON lines to `--log-file` / `NEWS_CLI_LOG_FILE`. The default is `$XDG_STATE_HOME/news/cli.log`, else `~/.local/state/news/cli.log`. `configure_logging()` still defaults to stdout for the server. An unopenable log file is reported on stderr with the path, the OS error and both overrides, because it can't be logged to the file that failed to open. That message is tested. The `docs/standards.md` logging line now matches D-6.
-- **Metrics:** none, as the spec requires. These are low-volume CLI events and the logs already cover them.
+- **Logs:** all three are structlog events at `info` from the service layer, and each is asserted exactly with `capture_logs`.
+  - `reader.not_found` (`reader_id`): `service/readers.py:28`.
+  - `channel.not_found` (`reader_id`, `channel_id`): `service/channels.py:118`.
+  - `plugin_revision.rejected` (`reader_id`, `errors` as field/message pairs): `service/plugins.py:28`.
+
+  From the CLI, they go to the CLI log file that ticket 01 set up.
+- **Metrics:** none, as the spec requires (D-15).
 
 ## Not verified
 Code complete is not deployment verified. This review did **not** verify:
-- Deployment, runtime behaviour in the target environment, or real traffic and data.
-- A run as root, or in a container. The read-only-directory test assumes a non-root user.
-- That the server process emits JSON on stdout at all. No server code calls `configure_logging()` (see Spec findings).
-- That `NEWS_CLI_LOG_FILE` is set in the container image. That belongs to the container ticket.
-- Anything in tickets 02–06.
+- Deployment, runtime behavior in the target environment, or real traffic and data.
+- The installed `news` binary on a real terminal. In particular, that no traceback appears outside `CliRunner`.
+- That the three events reach the real CLI log file. No test checks the file for `reader.not_found` (see findings).
+- Server-side emission of these events. No server code calls `configure_logging()` (from the ticket 01 report).
+- The final CLI stderr shape with `Logged to <path>.`, which belongs to ticket 02.
+- Anything in tickets 02 and 04–06.
 
 ## Deployment verification checklist
-Evaluate manually or in the observability system to confirm the deployed change matches the intent of the spec or ticket.
+Check these by hand or in the observability system, to confirm the deployed change does what the spec and ticket intend.
 
-- [ ] **Clean venv, non-root:** `NEWS_CLI_LOG_FILE=/tmp/news-ok/cli.log news --database-url sqlite:///x.db db upgrade`. Expect exit 0, `/tmp/news-ok/` created, and stdout carrying only command output.
-- [ ] **Invalid bind:** run `news channel bind … --config '{}'`. Expect stdout to be empty, and `tail -1 /tmp/news-ok/cli.log | jq '.event,.level,.timestamp'` to show `channel_revision.rejected`, `info` and a timestamp. Run it again and expect `wc -l` to go up by 1.
-- [ ] **Default location:** with `NEWS_CLI_LOG_FILE` and `XDG_STATE_HOME` both unset, any logging command creates `~/.local/state/news/cli.log`.
-- [ ] **Unopenable log file, non-root:** `mkdir -m 500 /tmp/ro && NEWS_CLI_LOG_FILE=/tmp/ro/logs/cli.log news --database-url sqlite:///y.db reader create A`. Expect exit 1, and one stderr line naming the path, `Permission denied`, `--log-file` and `NEWS_CLI_LOG_FILE`. Expect no `y.db`. Repeat against an existing database: its checksum should not change. As root, use a read-only mount.
-- [ ] **`docker logs <container>`:** server JSON lines on stdout, as before.
-- [ ] **Container, after the container ticket sets `NEWS_CLI_LOG_FILE=/data/logs/cli.log`:** CLI logs persist on the data volume across restarts.
+- [ ] **CLI, unknown Reader:** run `news channel create --reader <random uuid> X` and `news plugin create --reader <random uuid> --manifest m.toml --code main.py`. Each should print `no Reader <id>` and exit 1, with no traceback. `tail -1 <cli.log> | jq '.event,.level,.reader_id'` should show `reader.not_found`, `info` and the id. No `channel` or `plugin` row should be added. After ticket 02, stderr also shows `Logged to <path>.`
+- [ ] **CLI, invalid Manifest:** run `news plugin create --reader <id> --manifest bad.toml --code main.py` with a Manifest whose timeout is 0. It should exit 1 with the field error. The log file should have `plugin_revision.rejected` with `reader_id` and `errors`. The `plugin` and `plugin_revision` counts should not change.
+- [ ] **CLI, unknown or another Reader's Channel:** run `news channel bind --reader <id> --channel <id> --plugin-revision <id> --config '{}'` with a random Channel id, and again with another Reader's Channel. Each should exit 1, and the log file should have `channel.not_found` with `reader_id` and `channel_id`. The other Reader's Channel should get no new Revision.

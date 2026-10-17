@@ -6,14 +6,13 @@ import uuid
 from collections.abc import Generator
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Annotated, Any, TextIO
+from typing import Annotated, Any, TextIO, cast
 
 import typer
 from sqlalchemy import Engine
 from sqlalchemy.orm import Session
 
 from news.cli.log_file import resolve_log_path
-from news.service.binding_config import ConfigError
 from news.service.channels import (
     ChannelNotFound,
     ChannelRevisionRejected,
@@ -21,10 +20,11 @@ from news.service.channels import (
     create_channel,
 )
 from news.service.db import create_engine_for, migrate
-from news.service.manifest import ManifestError
+from news.service.manifest import PluginRevisionRejected
 from news.service.observability import configure_logging
 from news.service.plugins import create_plugin
-from news.service.readers import create_reader
+from news.service.readers import ReaderNotFound, create_reader
+from news.service.validation import FieldError
 
 app = typer.Typer(no_args_is_help=True, help="Manage the news app's data.")
 db_app = typer.Typer(no_args_is_help=True, help="The database.")
@@ -82,7 +82,7 @@ def _transaction(ctx: typer.Context) -> Generator[Session]:
         yield session
 
 
-def _fail(errors: list[ConfigError]) -> typer.Exit:
+def _fail(errors: list[FieldError]) -> typer.Exit:
     for error in errors:
         typer.echo(f"{error.field or '(root)'}: {error.message}", err=True)
     return typer.Exit(code=1)
@@ -95,7 +95,7 @@ def _parse_config(value: str) -> dict[str, Any]:
         raise typer.BadParameter(f"not valid JSON: {error}") from error
     if not isinstance(config, dict):
         raise typer.BadParameter("must be a JSON object")
-    return config  # pyright: ignore[reportUnknownVariableType]
+    return cast(dict[str, Any], config)
 
 
 @db_app.command("upgrade")
@@ -128,16 +128,23 @@ def plugin_create(
         with _transaction(ctx) as session:
             revision = create_plugin(session, reader, manifest.read_text(), files)
             typer.echo(revision.id)
-    except ManifestError as error:
+    except PluginRevisionRejected as error:
         raise _fail(error.errors) from error
+    except ReaderNotFound as error:
+        typer.echo(str(error), err=True)
+        raise typer.Exit(code=1) from error
 
 
 @channel_app.command("create")
 def channel_create(ctx: typer.Context, reader: ReaderOption, name: str) -> None:
     """Create a Channel with no Plugin Bindings and print its id."""
-    with _transaction(ctx) as session:
-        channel = create_channel(session, reader, name)
-        typer.echo(channel.id)
+    try:
+        with _transaction(ctx) as session:
+            channel = create_channel(session, reader, name)
+            typer.echo(channel.id)
+    except ReaderNotFound as error:
+        typer.echo(str(error), err=True)
+        raise typer.Exit(code=1) from error
 
 
 @channel_app.command("bind")

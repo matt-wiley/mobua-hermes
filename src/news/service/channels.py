@@ -8,10 +8,12 @@ import structlog
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
-from news.service.binding_config import ConfigError, validate_binding_config
+from news.service.binding_config import validate_binding_config
 from news.service.manifest import parse_manifest
 from news.service.models import Channel, ChannelRevision, PluginBinding, PluginRevision
+from news.service.readers import require_reader
 from news.service.revisions import next_revision_number
+from news.service.validation import FieldError, ValidationRejected
 
 log = structlog.get_logger(__name__)
 
@@ -20,10 +22,8 @@ class ChannelNotFound(LookupError):
     pass
 
 
-class ChannelRevisionRejected(Exception):
-    def __init__(self, errors: list[ConfigError]) -> None:
-        super().__init__("; ".join(f"{error.field}: {error.message}" for error in errors))
-        self.errors = errors
+class ChannelRevisionRejected(ValidationRejected):
+    pass
 
 
 @dataclass(frozen=True)
@@ -34,6 +34,7 @@ class BindingSpec:
 
 def create_channel(session: Session, reader_id: uuid.UUID, name: str) -> Channel:
     """Create a Channel whose first Revision has no Plugin Bindings yet."""
+    require_reader(session, reader_id)
     channel = Channel(id=uuid.uuid7(), reader_id=reader_id, name=name)
     session.add(channel)
     session.flush()
@@ -114,13 +115,14 @@ def _get_channel(session: Session, reader_id: uuid.UUID, channel_id: uuid.UUID) 
         select(Channel).where(Channel.id == channel_id, Channel.reader_id == reader_id)
     )
     if channel is None:
+        log.info("channel.not_found", reader_id=str(reader_id), channel_id=str(channel_id))
         raise ChannelNotFound(f"no Channel {channel_id} for this Reader")
     return channel
 
 
 def _binding_errors(
     session: Session, reader_id: uuid.UUID, position: int, binding: BindingSpec
-) -> list[ConfigError]:
+) -> list[FieldError]:
     prefix = f"bindings.{position}"
     # Bindable: the Reader's own Plugin Revisions, or Built-in ones, which have no Reader
     # (ADRs 0018, 0019). Another Reader's Revision is reported as missing, revealing nothing.
@@ -131,9 +133,9 @@ def _binding_errors(
         )
     )
     if plugin_revision is None:
-        return [ConfigError(f"{prefix}.plugin_revision_id", "no such Plugin Revision")]
+        return [FieldError(f"{prefix}.plugin_revision_id", "no such Plugin Revision")]
     schema = parse_manifest(plugin_revision.manifest).config_schema
     return [
-        ConfigError(f"{prefix}.{error.field}" if error.field else prefix, error.message)
+        FieldError(f"{prefix}.{error.field}" if error.field else prefix, error.message)
         for error in validate_binding_config(schema, binding.config)
     ]

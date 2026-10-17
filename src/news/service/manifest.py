@@ -6,13 +6,11 @@ from typing import Any
 from jsonschema import Draft202012Validator, SchemaError
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 
-from news.service.binding_config import ConfigError
+from news.service.validation import FieldError, ValidationRejected
 
 
-class ManifestError(Exception):
-    def __init__(self, errors: list[ConfigError]) -> None:
-        super().__init__("; ".join(f"{error.field}: {error.message}" for error in errors))
-        self.errors = errors
+class PluginRevisionRejected(ValidationRejected):
+    pass
 
 
 class Manifest(BaseModel):
@@ -38,12 +36,12 @@ def parse_manifest(text: str) -> Manifest:
     try:
         declared = tomllib.loads(text)
     except tomllib.TOMLDecodeError as error:
-        raise ManifestError([ConfigError("", f"invalid TOML: {error}")]) from error
+        raise PluginRevisionRejected([FieldError("", f"invalid TOML: {error}")]) from error
     try:
         return Manifest.model_validate(declared)
     except ValidationError as error:
         errors = [
-            ConfigError(".".join(str(part) for part in detail["loc"]), detail["msg"])
+            FieldError(".".join(str(part) for part in detail["loc"]), detail["msg"])
             for detail in error.errors()
         ]
-        raise ManifestError(errors) from error
+        raise PluginRevisionRejected(errors) from error

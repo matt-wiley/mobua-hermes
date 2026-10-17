@@ -5,7 +5,6 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 from structlog.testing import capture_logs
 
-from news.service.binding_config import ConfigError
 from news.service.channels import (
     BindingSpec,
     ChannelNotFound,
@@ -15,6 +14,7 @@ from news.service.channels import (
     save_channel_revision,
 )
 from news.service.models import Channel, ChannelRevision
+from news.service.validation import FieldError
 from tests.service.factories import (
     OPEN_PLUGIN_MANIFEST,
     a_built_in_plugin_revision,
@@ -77,7 +77,7 @@ def test_binding_missing_a_required_field_is_rejected_and_no_revision_is_created
         bind_plugin(session, reader.id, channel.id, plugin_revision.id, {})
 
     assert raised.value.errors == [
-        ConfigError(field="bindings.0.url", message="'url' is a required property")
+        FieldError(field="bindings.0.url", message="'url' is a required property")
     ]
     session.rollback()
     assert revision_count(session, channel) == 1
@@ -216,7 +216,7 @@ def test_binding_another_readers_plugin_revision_is_rejected_as_unknown(session:
         bind_plugin(session, other.id, channel.id, owners_revision.id, {"url": "https://x"})
 
     assert raised.value.errors == [
-        ConfigError(field="bindings.0.plugin_revision_id", message="no such Plugin Revision")
+        FieldError(field="bindings.0.plugin_revision_id", message="no such Plugin Revision")
     ]
     assert revision_count(session, channel) == 1
     assert logs[0]["event"] == "channel_revision.rejected"
@@ -242,3 +242,40 @@ def test_built_in_plugin_revision_can_be_bound_by_any_reader(session: Session) -
     revision = bind_plugin(session, reader.id, channel.id, built_in.id, {"url": "https://x"})
 
     assert revision.bindings[0].plugin_revision_id == built_in.id
+
+
+def test_an_unknown_channel_is_not_found_and_logged(session: Session) -> None:
+    reader = a_reader(session)
+    unknown = uuid.uuid7()
+
+    with capture_logs() as logs, pytest.raises(ChannelNotFound):
+        save_channel_revision(session, reader.id, unknown, [])
+
+    assert logs == [
+        {
+            "event": "channel.not_found",
+            "log_level": "info",
+            "reader_id": str(reader.id),
+            "channel_id": str(unknown),
+        }
+    ]
+
+
+def test_another_readers_channel_is_not_found_and_logged(session: Session) -> None:
+    owner = a_reader(session, "Ada")
+    other = a_reader(session, "Grace")
+    channel = create_channel(session, owner.id, "Local news")
+    plugin_revision = a_plugin_revision(session, other)
+
+    with capture_logs() as logs, pytest.raises(ChannelNotFound):
+        bind_plugin(session, other.id, channel.id, plugin_revision.id, {"url": "https://x"})
+
+    assert logs == [
+        {
+            "event": "channel.not_found",
+            "log_level": "info",
+            "reader_id": str(other.id),
+            "channel_id": str(channel.id),
+        }
+    ]
+    assert revision_count(session, channel) == 1

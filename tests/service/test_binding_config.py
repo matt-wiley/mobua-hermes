@@ -1,4 +1,5 @@
-from news.service.binding_config import ConfigError, validate_binding_config
+from news.service.binding_config import validate_binding_config
+from news.service.validation import FieldError
 
 URL_REQUIRED = {
     "type": "object",
@@ -14,7 +15,7 @@ def test_config_matching_the_schema_has_no_errors() -> None:
 def test_missing_required_field_is_reported_against_that_field() -> None:
     errors = validate_binding_config(URL_REQUIRED, {})
 
-    assert errors == [ConfigError(field="url", message="'url' is a required property")]
+    assert errors == [FieldError(field="url", message="'url' is a required property")]
 
 
 def test_unknown_field_is_rejected_when_schema_forbids_additional_properties() -> None:
@@ -41,7 +42,7 @@ def test_nested_field_error_names_the_full_path() -> None:
 
     errors = validate_binding_config(schema, {"options": {"limit": "ten"}})
 
-    assert errors == [ConfigError(field="options.limit", message="'ten' is not of type 'integer'")]
+    assert errors == [FieldError(field="options.limit", message="'ten' is not of type 'integer'")]
 
 
 def test_every_error_is_reported_in_field_order() -> None:

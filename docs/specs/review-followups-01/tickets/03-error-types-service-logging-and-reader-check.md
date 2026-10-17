@@ -1,7 +1,7 @@
 ---
 id: review-followups-01-03
 title: Error types, service failure logging, and the Reader check
-status: todo
+status: done
 blocked_by: []
 external: null
 ---
