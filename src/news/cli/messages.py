@@ -3,11 +3,19 @@
 from pathlib import Path
 
 from news.service.channels import ChannelNotFound
+from news.service.credentials import SecretNotFound
+from news.service.encryption import EncryptionError
 from news.service.readers import ReaderNotFound
 from news.service.validation import ValidationRejected
 
 # Failures caused by the user's input; the service layer logs them where they are raised.
-EXPECTED_FAILURES = (ValidationRejected, ChannelNotFound, ReaderNotFound)
+EXPECTED_FAILURES = (
+    ValidationRejected,
+    ChannelNotFound,
+    ReaderNotFound,
+    SecretNotFound,
+    EncryptionError,
+)
 
 
 def expected_failure_lines(error: Exception, log_path: Path) -> list[str]:

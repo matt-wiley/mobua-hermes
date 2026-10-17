@@ -135,6 +135,12 @@ These rules apply to this repo and take precedence over the library sections abo
 - Scope every row by Reader, and by Channel where it belongs to one. Enforce this in the service layer, because the database doesn't (ADRs 0007, 0013).
 - Logging: structlog, as JSON lines. The server process writes them to stdout; the CLI appends them to its log file (`--log-file` / `NEWS_CLI_LOG_FILE`, default `$XDG_STATE_HOME/news/cli.log`, else `~/.local/state/news/cli.log`), so CLI stdout carries only command output. Never log Secrets, LLM Provider keys, Gateway tokens or the Master Key, and never write them to disk (ADR 0009).
 - Metrics: prometheus-client, exposed at `/metrics`.
+- Credential storage (ADR 0009): use cryptography's AESGCM with 32-byte keys and fresh
+  random 12-byte nonces at the storage edge. Authenticate the Reader id for wrapped Data
+  Keys and the Reader/type/record id for credential values, so ciphertext swaps fail.
+  Never include supplied key material in errors or logs. Reason: AES-GCM requires unique
+  nonces per key and authenticates associated data alongside the ciphertext.
+  Source: [cryptography 50.0.2 AESGCM documentation](https://cryptography.io/en/50.0.2/hazmat/primitives/aead/#cryptography.hazmat.primitives.ciphers.aead.AESGCM), accessed 2026-10-17.
 - Serve the Web App with `app.frontend()`. The fallback filename must match `adapter-static`'s `fallback` (see the web section), e.g. `app.frontend("/", directory=<build dir>, fallback="200.html")`.
 - LLM calls go only through the service layer's LLM Gateway, never directly to provider SDKs from Channel or Plugin code (ADRs 0008, 0012).
 - Treat retrieved content (News Items, Source text, anything a Plugin fetched) as untrusted data in prompts: put it in clearly delimited data blocks, never concatenated into instruction text.

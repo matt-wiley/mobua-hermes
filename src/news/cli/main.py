@@ -17,7 +17,9 @@ from typer.core import TyperGroup
 from news.cli.log_file import resolve_log_path
 from news.cli.messages import EXPECTED_FAILURES, expected_failure_lines, unexpected_error_line
 from news.service.channels import bind_plugin, create_channel
+from news.service.credentials import save_provider, save_secret
 from news.service.db import create_engine_for, migrate
+from news.service.keys import generate_master_key, read_master_key
 from news.service.observability import configure_logging
 from news.service.plugins import create_plugin
 from news.service.readers import create_reader
@@ -79,8 +81,49 @@ app.add_typer(db_app, name="db")
 app.add_typer(reader_app, name="reader")
 app.add_typer(plugin_app, name="plugin")
 app.add_typer(channel_app, name="channel")
+secret_app = typer.Typer(cls=_CommandGroup, no_args_is_help=True, help="Encrypted Source Secrets.")
+provider_app = typer.Typer(cls=_CommandGroup, no_args_is_help=True, help="LLM Providers.")
+key_app = typer.Typer(cls=_CommandGroup, no_args_is_help=True, help="Initial Master Key setup.")
+app.add_typer(secret_app, name="secret")
+app.add_typer(provider_app, name="provider")
+app.add_typer(key_app, name="key")
 
 ReaderOption = Annotated[uuid.UUID, typer.Option("--reader", help="The Reader acting.")]
+
+
+@key_app.command("generate")
+def key_generate(ctx: typer.Context) -> None:
+    """Print a new Master Key once. Save it outside the database before adding credentials."""
+    with _transaction(ctx) as session:
+        encoded = generate_master_key(session, os.environ)
+    typer.echo(encoded)
+
+
+@secret_app.command("set")
+def secret_set(ctx: typer.Context, reader: ReaderOption, name: str) -> None:
+    """Add or replace a Secret, prompting privately for its value."""
+    value = typer.prompt("Secret value", hide_input=True, confirmation_prompt=True)
+    with _transaction(ctx) as session:
+        secret_id = save_secret(
+            session, reader, name, value, lambda: read_master_key(os.environ)
+        ).id
+    typer.echo(secret_id)
+
+
+@provider_app.command("add")
+def provider_add(
+    ctx: typer.Context,
+    reader: ReaderOption,
+    name: str,
+    url: Annotated[str, typer.Option("--url", help="Provider API base URL.")],
+) -> None:
+    """Add or update a named LLM Provider, prompting privately for its credential."""
+    api_key = typer.prompt("Provider API key", hide_input=True, confirmation_prompt=True)
+    with _transaction(ctx) as session:
+        provider_id = save_provider(
+            session, reader, name, url, api_key, lambda: read_master_key(os.environ)
+        ).id
+    typer.echo(provider_id)
 
 
 @app.callback()

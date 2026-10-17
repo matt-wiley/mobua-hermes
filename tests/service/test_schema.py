@@ -60,6 +60,9 @@ def test_scopes_match_the_design(engine: Engine) -> None:
     assert scopes == {
         "alembic_version": "app",
         "reader": "reader",
+        "reader_data_key": "reader",
+        "secret": "reader",
+        "llm_provider": "reader",
         "plugin": "reader",
         "plugin_revision": "reader",
         "channel": "channel",
@@ -77,6 +80,9 @@ def test_foreign_key_targets_are_read_from_the_migrated_database(engine: Engine)
     assert targets == {
         "alembic_version": set(),
         "reader": set(),
+        "reader_data_key": {"reader"},
+        "secret": {"reader"},
+        "llm_provider": {"reader"},
         "plugin": {"reader", "plugin_revision"},
         "plugin_revision": {"reader", "plugin"},
         "channel": {"reader", "channel_revision"},
