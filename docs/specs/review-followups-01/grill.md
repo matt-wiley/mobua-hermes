@@ -2,7 +2,7 @@
 slug: review-followups-01
 external: null
 confirmed: true
-spec_written: false
+spec_written: true
 ---
 # Grill: Follow-ups from the ticket 01 code review
 
