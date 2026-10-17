@@ -4,14 +4,26 @@ Every table declares its scope in `Table.info`: `app`, `reader` or `channel` (AD
 A `reader` table carries a Reader id, and a `channel` table carries a Channel id as well.
 The `reader` and `channel` tables are scoped by their own `id`. Plugin and Plugin Revision rows
 of Built-in Plugins leave the Reader id empty (ADR 0019). The schema tests check these rules.
+
+Plugin Revisions, Channel Revisions and Plugin Bindings are never updated once written: a flush
+that would update one raises ImmutableRevisionError.
 """
 
 import uuid
 from datetime import UTC, datetime
 from typing import Any, Literal
 
-from sqlalchemy import JSON, DateTime, ForeignKey, MetaData, Text, UniqueConstraint
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
+from sqlalchemy import (
+    JSON,
+    DateTime,
+    ForeignKey,
+    MetaData,
+    Text,
+    UniqueConstraint,
+    event,
+    inspect,
+)
+from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, relationship
 
 type Scope = Literal["app", "reader", "channel"]
 
@@ -127,3 +139,31 @@ class PluginBinding(Base):
     config: Mapped[dict[str, Any]] = mapped_column(JSON)
 
     plugin_revision: Mapped[PluginRevision] = relationship()
+
+
+# Never updated once written: edits insert a new Revision instead (ADRs 0016, 0018). Deletes and
+# the current-Revision pointers on Plugin and Channel rows are left alone.
+IMMUTABLE_MODELS = (PluginRevision, ChannelRevision, PluginBinding)
+
+
+class ImmutableRevisionError(Exception):
+    """A flush would update a Revision or Plugin Binding row: a programming error."""
+
+    def __init__(self, table: str, attributes: list[str]) -> None:
+        super().__init__(f"{table} rows are immutable; changed: {', '.join(attributes)}")
+        self.table = table
+        self.attributes = attributes
+
+
+@event.listens_for(Session, "before_flush")
+def _reject_revision_updates(session: Session, _flush_context: Any, _instances: Any) -> None:
+    # Registered on the Session class, so every session the CLI or API opens is guarded.
+    # In-place changes inside a JSON value aren't tracked, so they never reach this check.
+    for instance in session.dirty:
+        if not isinstance(instance, IMMUTABLE_MODELS):
+            continue
+        state = inspect(instance)
+        # Relationships too: reassigning one sets its foreign key only later, during the flush.
+        changed = sorted(attr.key for attr in state.attrs if attr.history.has_changes())
+        if changed:
+            raise ImmutableRevisionError(instance.__tablename__, changed)
