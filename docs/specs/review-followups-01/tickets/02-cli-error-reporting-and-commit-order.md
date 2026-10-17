@@ -1,7 +1,7 @@
 ---
 id: review-followups-01-02
 title: CLI error reporting and echo after commit
-status: todo
+status: done
 blocked_by: [review-followups-01-01, review-followups-01-03]
 external: null
 ---
@@ -16,24 +16,26 @@ AC-12, AC-13, AC-18
 
 ## Seams
 - **Edge:** the CLI's transaction helper and a top-level handler around command execution. `ValidationRejected` and the `LookupError` subclasses (`ChannelNotFound`, `ReaderNotFound`, from ticket 03) are handled in one place.
-- **Commit failure:** a real second SQLite connection holding `BEGIN IMMEDIATE` on the test database, so the CLI's commit fails with a lock error. No mocks.
+- **Commit failure:** a trigger, added to the test database from a real second SQLite connection, writes a dangling `DEFERRABLE INITIALLY DEFERRED` foreign key whenever the command inserts. SQLite checks deferred keys only at COMMIT, so the command's flush succeeds and its commit fails. No mocks. (Amended in review: a held write lock fails the first INSERT at flush, never at commit.)
+- **Flush failure:** a real second SQLite connection holding `BEGIN IMMEDIATE`, so the command's first INSERT fails with a lock error. No mocks.
 
 ## Observability
-- `error` `cli.unexpected_error`: `command`, `exc_info`. Written to the CLI log file.
+- `error` `cli.unexpected_error`: `command`, `exc_info`. Written to the CLI log file. Not written when the failure comes before the log path is known; stderr then ends `No log file was open to record it.` `command` names only the commands resolved so far.
 
 ## Verification
 - **AC-12:**
   - **Rejected bind:** the field error, then `Logged to <path>.`, exit 1.
   - **Unknown Channel:** `no Channel …`, then the pointer.
   - **Unknown Reader:** `no Reader <id>`, then the pointer.
-- **AC-13:** using the commit-failure setup:
+- **AC-13:** using the flush-failure setup:
   - the log file has `cli.unexpected_error` with `command` and a traceback;
   - stderr is exactly one line in the specified format, with no `Traceback` text;
   - exit 1.
-- **AC-18:** with the write lock held:
+- **AC-18:** using the commit-failure setup, for each writing command:
   - stdout is empty;
   - exit 1;
-  - after the lock is released, a fresh connection finds none of the command's rows (for example no new Reader).
+  - a fresh connection finds none of the command's rows (for example no new Reader);
+  - with the flush-failure setup as well, counting only after the lock is released.
 - **Feeds deployment checks:** "CLI, invalid bind" and "CLI, unknown Reader".
 
 ## Out of scope

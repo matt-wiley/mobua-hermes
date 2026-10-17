@@ -5,6 +5,14 @@ from news.service.manifest import PluginRevisionRejected
 from news.service.validation import FieldError, ValidationRejected
 
 
+def test_a_field_error_reads_as_its_field_then_its_message() -> None:
+    assert str(FieldError("url", "required")) == "url: required"
+
+
+def test_a_field_error_at_the_root_reads_as_the_root() -> None:
+    assert str(FieldError("", "invalid TOML")) == "(root): invalid TOML"
+
+
 def test_rejection_carries_its_field_errors() -> None:
     errors = [FieldError("url", "required"), FieldError("timeout", "too small")]
 

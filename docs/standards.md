@@ -129,6 +129,7 @@ These rules apply to this repo and take precedence over the library sections abo
 ### core (`src/news/**`, `tests/**`, `alembic/**`)
 - Target Python 3.14 (`requires-python = ">=3.14"`) and manage dependencies and the venv with uv.
 - Lint and format with ruff; type-check with pyright.
+- Multi-exception `except` style is whatever `ruff format` (target py314) produces: `except A, B:` without `as`, `except (A, B) as error:` with it.
 - Layering: `api/` and `cli/` may import `service/` but never each other, and `service/` imports neither. import-linter enforces this in `lint` (ADR 0017).
 - Keep the database portable between SQLite and Postgres. Don't use SQLite-only or Postgres-only SQL features without a fallback, so use generic `JSON`, not `sqlite.JSONB` (ADR 0013). SQLite runs in WAL mode (ADR 0017).
 - Scope every row by Reader, and by Channel where it belongs to one. Enforce this in the service layer, because the database doesn't (ADRs 0007, 0013).

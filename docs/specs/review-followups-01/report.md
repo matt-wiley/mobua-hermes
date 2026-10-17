@@ -1,72 +1,135 @@
-# Code-complete report: review-followups-01-03, error types, service failure logging, and the Reader check
+# Code-complete report: review-followups-01-02, CLI error reporting and echo after commit
 
-- **Covers:** `01e4f81..ea17703` on branch `feat/design-consistency-pass`
+- **Covers:** `d16e591..40bb711` on branch `feat/design-consistency-pass`
 - **Spec:** `docs/specs/review-followups-01/spec.md`
-- **Tickets:** review-followups-01-03 (done). Ticket 01 was reviewed earlier: its report is at `01e4f81:docs/specs/review-followups-01/report.md`. Tickets 02, 04, 05 and 06 are open and are **not** covered by this report.
+- **Tickets:** review-followups-01-02 (done). This report replaces the previous review of this ticket, at `5279531` (NOT CODE COMPLETE, covering `..7bffd69`). Earlier reports: ticket 01 at `01e4f81:docs/specs/review-followups-01/report.md`, and ticket 03 at `d16e591:docs/specs/review-followups-01/report.md`. Tickets 04, 05 and 06 are open and are **not** covered here.
 - **Sync:** n/a (no `external:` links)
 - **Date:** 2026-10-17
 
 ## Verdict
-**CODE COMPLETE** (ticket 01-03 only): tests assert AC-15, AC-16, AC-17 and AC-19, the D-13 checks hold, all three axes pass, and the gates are green. All findings are minor.
+**CODE COMPLETE** (ticket 01-02 only): tests assert AC-12, AC-13 and AC-18, all three axes pass, and all the gates are green. The previous review's AC-18 major is fixed. There is now a real commit-time failure, and two reviewers each confirmed independently that it fails at `dbapi_connection.commit()` and catches the old echo-inside-transaction code. Every finding left is minor.
 
-The spec as a whole is not code complete until tickets 02 and 04–06 are done and reviewed.
+The spec as a whole is not code complete until tickets 04–06 are done and reviewed.
 
 ## Findings
-There are no blockers or majors. The minor findings are listed below.
-
-### Standards
-- [minor] `src/news/service/binding_config.py:39`: baseline §1 (comments say why). The D-13 comment sits above `_missing_fields`, but it also explains the `cast(dict[str, Any], error.instance)` in `_unexpected_fields`. It also partly repeats the comment at lines 26-27. Fix: say in the comment that it covers both helpers. That keeps the ticket's "one comment" rule.
-- [minor] `src/news/service/validation.py:19` and `src/news/cli/main.py:87`: baseline §1 and §4 (no duplicated logic). `error.field or '(root)'` is formatted in two places, so the CLI output and the exception message could drift apart. Fix: in ticket 02 (spec D-10), have `_fail` reuse the base class's formatting. The evidence already defers it there.
-- [minor, adjacent, pre-existing] `src/news/service/channels.py:63-67`: baseline Observability. `channel_revision.rejected` logs `channel_id` and `errors` but not `reader_id`. The new events all include `reader_id`, so the rejection events are now inconsistent. This is out of scope for this ticket. Fix: open a follow-up.
-- Standards snapshot: not stale. `docs/standards.md` (2026-10-16) matches `docs/mobua-swe.md` and `uv.lock`. As the ticket 01 report already noted, structlog 26.1, Typer 0.27 and jsonschema 4.26 have no library entries. Fix: add them the next time `/mobua-swe:setup` runs.
+There are no blockers or majors. The minor findings are below.
 
 ### Spec
-- [minor] `src/news/service/validation.py:19`: spec AC-19, "Each has the message `"<field>: <message>"`, joined with `"; "`". The ticket's Verification asks for "an empty `field` shown at the root", and the code does that: `str(exception)` now renders `(root)` where it used to render `": <message>"`. The spec's AC-19 doesn't mention `(root)`, so the spec and the ticket disagree. The evidence discloses the change, and it is tested. Fix: add the `(root)` rule to AC-19. No code change.
-- [minor] `src/news/service/plugins.py:28`: spec D-7, "the service layer logs rejected user input at `info`, where the rejection is raised". `PluginRevisionRejected` is raised in the pure `parse_manifest`, but `create_plugin` catches it, logs it and re-raises it, because only `create_plugin` has the `reader_id`. This is justified and recorded in the evidence. Fix: none needed. Optionally, note this placement in D-7.
+- [minor] `docs/specs/review-followups-01/spec.md:141` and `:168`. Source: AC-18, "(for example, another connection holds the SQLite write lock)", and the test-seam line, "Commit failure uses a real second SQLite connection holding `BEGIN IMMEDIATE`".
+  - The ticket's Seams were amended: a held lock fails at flush, so commit failure now comes from a deferred foreign key added by a trigger. The spec still gives the lock as its example.
+  - Nothing contradicts any criterion or D-xx, because the lock is only an example in AC-18.
+  - Fix (spec owner): change the example and the seam line to the deferred-foreign-key trigger.
+- [minor] `src/news/cli/main.py:58` and `src/news/cli/messages.py`, the `log_path is None` branch. Source: AC-13, "`… Details logged to <path>.`", and D-6, "CLI stdout carries only command output".
+  - When the log path can't be worked out (`Path.home()` fails), `cli.unexpected_error` is skipped and stderr says `No log file was open to record it.`
+  - That is the only option consistent with D-6, because structlog's default would write to stdout. It is recorded in the evidence, but not in the spec or the ticket.
+  - Fix: add one line to D-6 or to the ticket's Observability.
+- [minor] `tests/cli/test_cli.py:634`. Source: ticket Seams, "its commit fails".
+  - `assert "commit" in entry["exception"]` is a weak check, because SQLAlchemy's `commit()` autoflushes, so a flush failure would also match. The behaviour is correct today; the reviewer checked the traceback.
+  - Fix: assert on `do_commit`.
+- [minor] `tests/cli/test_cli.py:592-597`. Source: AC-18, "no row from the command persists".
+  - The `plugin` case counts `PluginRevision` rows but not `Plugin` rows. The whole transaction rolls back, so the gap is only in the assertion.
+  - Fix: count both.
+
+### Standards
+- [minor] `docs/standards.md`, "Repo overrides". Source: the Python syntax rule, "Pick one style for multi-exception `except` clauses per repo".
+  - The repo's actual rule is whatever `ruff format` (py314) produces: no parentheses without `as`, and parentheses with `as`. The reviewer confirmed this on a scratch copy with ruff 0.17.1.
+  - The rule is written down only in the evidence, so the finding will come up again in later reviews.
+  - Fix: add a one-line override.
+- [minor] `docs/standards.md`, the stack table. Source: `standards-library.md`.
+  - The snapshot isn't stale.
+  - Typer 0.27, Pydantic 2.14 and Alembic 1.20 still have no entries, and this ticket relies on Typer internals.
+  - Fix: research a `typer.md` at 0.27, then re-run `/mobua-swe:setup`.
+- [minor] `tests/cli/test_cli.py:546, 592-605`. Source: baseline §4 (one source of truth).
+  - `WRITING_COMMANDS`, `MODEL_INSERTED_BY` and `TABLE_INSERTED_BY` repeat the same keys.
+  - Fix: use one mapping and derive the table from `__tablename__`.
+- [minor] `tests/cli/test_cli.py:450, 622, 651`. Source: baseline §4.
+  - The SQLite file path is worked out in two ways: from `database_url` in one place, and as a hard-coded `tmp_path / "news.db"` in others.
+  - Fix: add a `database_path` fixture that `database_url` builds on.
+- [minor] `src/news/cli/main.py:33`. Source: baseline readability.
+  - The comment about the vendored Click `Context` is hard to parse.
+  - Fix: reword it, e.g. "These methods receive Typer's vendored Click Context, which has no public import path, hence `Any`."
 
 ### Code-complete evidence
-- [minor] `tests/cli/test_cli.py:379-413`: an evidence gap for the deployment check "CLI, unknown Reader … The log file has `reader.not_found`". The two CLI unknown-Reader tests check the exit code, stderr, empty stdout and `SystemExit`. They don't check that `reader.not_found` reaches the CLI log file. Fix: assert `[line["event"] for line in log_lines(log_file)] == ["reader.not_found"]`, here or in ticket 02.
-- [minor] `docs/specs/review-followups-01/evidence/03.md:84-91`: code-complete item 2 (red for the right reason). Two of the four AC-17 service red failures are `NotImplementedError` from the stub. That is weaker than an assertion failure. The `IntegrityError` failures do show the missing check, so this is acceptable. Fix: none. Next time, a no-op stub would show that rows were written.
+- [minor] `docs/specs/review-followups-01/evidence/02.md`, the deployment checklist. Source: code-complete item 7.
+  - It lacks the happy-path, unknown-Channel, unopenable-log-file and clean-venv checks.
+  - Fix: none needed in the evidence file. This report's checklist below covers them.
+- [minor] The evidence's Not verified section. Source: code-complete item 7.
+  - The review follow-ups were not run by hand. This is disclosed, and it is carried into Not verified below.
+
+### Fixed after this review
+After the review, the author fixed every minor finding except the Typer standards entry. The gates were re-run: pyright 0 errors, lint clean, 111 tests passed, and the build succeeded. These changes were **not** independently re-reviewed.
+- **Spec and ticket:** AC-18's example and the test-seam line now name the deferred-foreign-key trigger. AC-13, the spec's Observability and the ticket's Observability now describe the no-log-path case and the partial `command`.
+- **Tests:**
+  - The commit-failure test asserts `do_commit`, not just `commit`.
+  - The plugin case counts `Plugin` and `PluginRevision` rows.
+  - One `MODELS_INSERTED_BY` mapping drives both parametrized tests, and the trigger table comes from `__tablename__`.
+  - A `database_path` fixture replaces the hard-coded `tmp_path / "news.db"`.
+- **Standards:** `docs/standards.md` has a repo override saying `ruff format` decides the `except` style. The `main.py` comment about the vendored Click `Context` is reworded.
+- **Still open:** the Typer, Pydantic and Alembic standards entries. They need research and a `/mobua-swe:setup` run.
+
+The previous review's findings were all resolved except two:
+- **The parenthesized `except`:** not changed, because the formatter enforces the current style. All three reviewers accepted the reason.
+- **The Typer standards entry:** still open, as listed above.
 
 ## Criteria evidence
 | Criterion | Tests (names) | Happy | Failure | Boundary | Edge | Red-first | Green |
 |---|---|---|---|---|---|---|---|
-| AC-15 | `test_plugins.py`: `test_rejected_manifest_is_logged_with_the_reader_and_errors`, `test_malformed_manifest_is_logged_with_its_root_error`, `test_plugin_with_an_invalid_manifest_is_rejected_and_not_saved` | yes: the existing create tests log nothing | yes: schema rejection and TOML parse failure | yes: timeout boundaries in `test_manifest.py` | yes: root-level error | yes | yes |
-| AC-16 | `test_channels.py`: `test_an_unknown_channel_is_not_found_and_logged`, `test_another_readers_channel_is_not_found_and_logged`, `test_another_readers_channel_cannot_be_revised`. `test_cli.py`: `test_binding_to_an_unknown_channel_is_reported` | yes: a found Channel logs nothing (asserted exactly) | yes: both not-found paths, both through `_get_channel` | n/a: no range to bound (justified) | n/a (justified) | yes | yes |
-| AC-17 | `test_readers.py`: 5 tests. `test_cli.py`: `test_creating_a_{channel,plugin}_for_an_unknown_reader_is_reported_without_a_traceback` | yes | yes: in the service and in both CLI commands | yes: `not session.new` and row counts are 0 | n/a: Typer rejects malformed UUIDs (justified) | yes (2 of 4 service reds are stub `NotImplementedError`, minor) | yes |
-| AC-19 | `test_validation.py`: 8 tests. The renamed tests in `test_binding_config.py`, `test_manifest.py`, `test_channels.py` and `test_plugins.py`. A grep finds no `ConfigError` or `ManifestError` | yes | n/a: value types with no failure path (justified) | yes: one error, zero errors | yes: an empty field shown as `(root)` | yes | yes |
-| D-13 | Checked in review: `cli/main.py:98` uses `cast` with no ignore, and `binding_config.py:39` has the comment. The only remaining `pyright: ignore` is the commented `iter_errors` one | n/a | n/a | n/a | n/a | n/a: refactor covered by the existing `_parse_config` tests | yes |
+| AC-12 | `test_binding_with_invalid_config_reports_field_errors_and_saves_nothing`, `test_invalid_manifest_reports_field_errors`, `test_binding_to_an_unknown_channel_is_reported`, `test_creating_a_{channel,plugin}_for_an_unknown_reader…` (now also asserting `reader.not_found` in the file), `test_messages.py` | yes | yes: all three failure kinds, exact stderr | yes: several field errors, pointer last | yes: root field shown as `(root)` | yes | yes |
+| AC-13 | `test_an_unexpected_error_is_logged_with_its_traceback_and_reported_in_one_line`, `test_an_unexpected_error_before_the_command_runs_is_reported_the_same_way`, `test_an_error_before_the_log_file_is_known_is_reported_without_a_pointer`, `test_messages.py` | n/a: failure-only criterion | yes: lock error, callback failure, no log path | yes: one line; multi-line and empty messages; no `..` | yes: failure before dispatch (partial `command`, documented) | yes | yes |
+| AC-18 | `test_a_command_whose_commit_fails_prints_nothing_and_saves_nothing[reader,plugin,channel,bind]`, `test_a_command_that_fails_at_flush_prints_nothing_and_saves_nothing`, `test_output_is_printed_only_after_the_transaction_has_committed[reader,plugin,channel,bind]` | yes: D-9 spy across all four | yes: COMMIT failure (deferred foreign key) for all four, flush failure | yes: stdout exactly empty, row counts unchanged | n/a: `db upgrade` already echoed after commit (justified) | yes: 4 failed against e77cbe9's `main.py`; spy was red before cf8a501 | yes |
 
-From commit history: each test landed in the same commit as its code (b8ed188, 349f097, 3bc04fb, de53202). b032859 is a refactor covered by the existing tests. No tests were deleted, weakened or skipped. The changes to `tests/` are renames and additions only. There are no mocks: the service tests run on migrated SQLite, and the CLI tests use `CliRunner` against a real database.
+From commit history:
+- Tests landed with their code in c2e2153, 831400a, e77cbe9, cf8a501, 1b01f07 and 804bfc1.
+- ae17387 and cc43eeb are tests only, covering behaviour already built. Their reds came from the old code and from a temporary mutation; the Evidence reviewer re-ran both and got the same results.
+- f7c67bf is a refactor covered by the AC-12 tests.
+- No tests were deleted, weakened or skipped.
+
+Mocks and seams:
+- Commit and flush failures run against real SQLite.
+- The `typer.echo` spy calls through to the real function.
+- `pwd.getpwuid` is patched only at the OS user-database boundary, and raises `KeyError` as the real function does.
 
 ## Gates
 | Gate | Command | Result |
 |---|---|---|
 | Typecheck | `uv run pyright` | pass (0 errors) |
-| Lint | `uv run ruff check . && uv run ruff format --check . && uv run lint-imports` | pass (1 import contract kept) |
-| Full suite | `uv run pytest` | pass (89 tests, none skipped) |
+| Lint | `uv run ruff check . && uv run ruff format --check . && uv run lint-imports` | pass (111 files formatted, 1 contract kept) |
+| Full suite | `uv run pytest` | pass (111 tests, none skipped) |
+| Build | `uv build` | pass (wheel and sdist) |
 
 ## Observability delivered
-- **Logs:** all three are structlog events at `info` from the service layer, and each is asserted exactly with `capture_logs`.
-  - `reader.not_found` (`reader_id`): `service/readers.py:28`.
-  - `channel.not_found` (`reader_id`, `channel_id`): `service/channels.py:118`.
-  - `plugin_revision.rejected` (`reader_id`, `errors` as field/message pairs): `service/plugins.py:28`.
-
-  From the CLI, they go to the CLI log file that ticket 01 set up.
+- **Logs:** `error` `cli.unexpected_error` (`command`, `exc_info` rendered as `exception`) from `cli/main.py`, written to the CLI log file (D-6).
+  - Tested for its level, its command, a traceback in the file, and its absence from the terminal.
+  - Skipped, with stderr saying so, when no log path is known.
+  - Expected failures rely on the service events from ticket 03. `reader.not_found` reaching the CLI log file is now asserted.
 - **Metrics:** none, as the spec requires (D-15).
 
 ## Not verified
 Code complete is not deployment verified. This review did **not** verify:
 - Deployment, runtime behavior in the target environment, or real traffic and data.
-- The installed `news` binary on a real terminal. In particular, that no traceback appears outside `CliRunner`.
-- That the three events reach the real CLI log file. No test checks the file for `reader.not_found` (see findings).
-- Server-side emission of these events. No server code calls `configure_logging()` (from the ticket 01 report).
-- The final CLI stderr shape with `Logged to <path>.`, which belongs to ticket 02.
-- Anything in tickets 02 and 04–06.
+- The installed `news` binary from a wheel or a container. The evidence's hand checks ran from a source checkout only.
+- The review follow-ups by hand: the commit-time failure, the error before the log path is known, and the unknown-Reader log line. They are covered by tests only.
+- A real commit failure in production. In practice that would be disk-full or I/O errors at COMMIT, which the tests simulate with a deferred foreign key.
+- Anything in tickets 04–06.
 
 ## Deployment verification checklist
 Check these by hand or in the observability system, to confirm the deployed change does what the spec and ticket intend.
 
-- [ ] **CLI, unknown Reader:** run `news channel create --reader <random uuid> X` and `news plugin create --reader <random uuid> --manifest m.toml --code main.py`. Each should print `no Reader <id>` and exit 1, with no traceback. `tail -1 <cli.log> | jq '.event,.level,.reader_id'` should show `reader.not_found`, `info` and the id. No `channel` or `plugin` row should be added. After ticket 02, stderr also shows `Logged to <path>.`
-- [ ] **CLI, invalid Manifest:** run `news plugin create --reader <id> --manifest bad.toml --code main.py` with a Manifest whose timeout is 0. It should exit 1 with the field error. The log file should have `plugin_revision.rejected` with `reader_id` and `errors`. The `plugin` and `plugin_revision` counts should not change.
-- [ ] **CLI, unknown or another Reader's Channel:** run `news channel bind --reader <id> --channel <id> --plugin-revision <id> --config '{}'` with a random Channel id, and again with another Reader's Channel. Each should exit 1, and the log file should have `channel.not_found` with `reader_id` and `channel_id`. The other Reader's Channel should get no new Revision.
+- [ ] **CLI, invalid bind:** run `news channel bind --reader <id> --channel <id> --plugin-revision <id> --config '{}'`.
+  - stderr: the field error line(s), then `Logged to <path>.`
+  - stdout: empty. Exit code: 1.
+  - `tail -1 <cli.log> | jq .event` shows `"channel_revision.rejected"`.
+- [ ] **CLI, unknown Reader:** run `news channel create --reader <random uuid> X`.
+  - stderr: exactly `no Reader <id>`, then `Logged to <path>.` No traceback.
+  - Exit code: 1.
+  - `tail -1 <cli.log> | jq .event` shows `"reader.not_found"`.
+- [ ] **CLI, unknown Channel:** run `news channel bind` with a random `--channel`.
+  - stderr: `no Channel … for this Reader`, then `Logged to <path>.`
+  - Exit code: 1.
+- [ ] **CLI, unexpected error:** in another shell, run `sqlite3 x.db` and enter `BEGIN IMMEDIATE;`, leaving it open. Then run `news --database-url sqlite:///x.db reader create A`.
+  - stderr: one `Unexpected error: OperationalError: … Details logged to <path>.` line. stdout: empty. Exit code: 1.
+  - `jq 'select(.event=="cli.unexpected_error") | .level,.command' <cli.log>` shows `"error"` and `"reader create"`, and the entry's `exception` holds a traceback.
+  - After the lock is released, `sqlite3 x.db "select count(*) from reader where name='A'"` returns 0.
+- [ ] **CLI, happy path (D-9):** `news reader create A` prints the new id only once the command returns, and `sqlite3 x.db "select count(*) from reader where name='A'"` returns 1.
+- [ ] **CLI, unopenable log file** (`mkdir -m 500 /tmp/ro && NEWS_CLI_LOG_FILE=/tmp/ro/logs/cli.log news reader create A`, as a non-root user): exits 1 before any database write, naming the path and the override.
+- [ ] **Clean venv** (`uv build`, `pip install dist/*.whl`, then the checks above): same results as from a source checkout.

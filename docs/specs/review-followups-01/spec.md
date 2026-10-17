@@ -128,6 +128,7 @@ It lands on `feat/design-consistency-pass` before design-consistency-pass-02 sta
 - **AC-13:** An unexpected exception during a command:
   - logs `cli.unexpected_error` at `error` level to the file, with the command name and the traceback;
   - prints exactly one stderr line, `Unexpected error: <Type>: <message>. Details logged to <path>.`;
+  - if it happens before the log path is known (for example `Path.home()` fails), logs nothing, because logging is not configured and would reach stdout (D-6), and the line ends `No log file was open to record it.` instead;
   - shows no traceback on the terminal;
   - exits 1.
 - **AC-14:** Without CLI configuration, `configure_logging()` still writes JSON lines to stdout, as the server needs.
@@ -138,7 +139,7 @@ It lands on `feat/design-consistency-pass` before design-consistency-pass-02 sta
 - **AC-17:** When `create_plugin` or `create_channel` is given an unknown Reader id, `ReaderNotFound` is raised, no row is written, and `reader.not_found` is logged at `info` with `reader_id`. Through the CLI, stderr shows `no Reader <id>` and the command exits 1.
 
 ### Transactions
-- **AC-18:** When a CLI command's commit fails (for example, another connection holds the SQLite write lock), stdout is empty, the command exits 1 through the AC-13 path, and no row from the command persists.
+- **AC-18:** When a CLI command's commit fails (for example, a deferred constraint is violated at COMMIT), stdout is empty, the command exits 1 through the AC-13 path, and no row from the command persists.
 
 ### Error types
 - **AC-19:** `ChannelRevisionRejected` and `PluginRevisionRejected` are both `ValidationRejected`.
@@ -165,7 +166,7 @@ It lands on `feat/design-consistency-pass` before design-consistency-pass-02 sta
   - Log path resolution is unit-tested with explicit env and home values.
   - CLI behavior uses Typer's `CliRunner` with `NEWS_CLI_LOG_FILE` pointing into `tmp_path`.
   - The unopenable-file case uses a path under a read-only or non-existent parent.
-  - Commit failure uses a real second SQLite connection holding `BEGIN IMMEDIATE`, not a mock.
+  - Commit failure uses a trigger, added from a real second SQLite connection, that writes a dangling `DEFERRABLE INITIALLY DEFERRED` foreign key, so the flush succeeds and the COMMIT fails. Not a mock. (Amended in review: a second connection holding `BEGIN IMMEDIATE` fails the first INSERT at flush, which is now the separate flush-failure seam.)
   - The guard is tested on a real migrated SQLite session.
   - The schema rules get unit tests on synthetic descriptions, plus one integration test that feeds them the migrated database.
   - The wheel check builds into `tmp_path`. It is the one slower integration test.
@@ -175,7 +176,7 @@ It lands on `feat/design-consistency-pass` before design-consistency-pass-02 sta
   - `info` `plugin_revision.rejected`: `reader_id`, `errors`. The plugin-drafts spec adds `plugin_id` when Promote rejects a draft of an existing Plugin.
   - `info` `channel.not_found`: `reader_id`, `channel_id`.
   - `info` `reader.not_found`: `reader_id`.
-  - `error` `cli.unexpected_error`: `command`, `exc_info`.
+  - `error` `cli.unexpected_error`: `command`, `exc_info`. Not written when the failure comes before the log path is known (AC-13). `command` names only the commands resolved so far.
   - `info` `channel_revision.rejected`: unchanged.
   - **Destination:** server process to stdout; CLI to its log file (D-6).
 - **Metrics:** none. The design-consistency-pass spec allows only the four Gateway metrics, and these are low-volume user-input events that the logs already cover.

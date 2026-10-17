@@ -8,29 +8,73 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Annotated, Any, TextIO, cast
 
+import structlog
 import typer
 from sqlalchemy import Engine
 from sqlalchemy.orm import Session
+from typer.core import TyperGroup
 
 from news.cli.log_file import resolve_log_path
-from news.service.channels import (
-    ChannelNotFound,
-    ChannelRevisionRejected,
-    bind_plugin,
-    create_channel,
-)
+from news.cli.messages import EXPECTED_FAILURES, expected_failure_lines, unexpected_error_line
+from news.service.channels import bind_plugin, create_channel
 from news.service.db import create_engine_for, migrate
-from news.service.manifest import PluginRevisionRejected
 from news.service.observability import configure_logging
 from news.service.plugins import create_plugin
-from news.service.readers import ReaderNotFound, create_reader
-from news.service.validation import FieldError
+from news.service.readers import create_reader
 
-app = typer.Typer(no_args_is_help=True, help="Manage the news app's data.")
-db_app = typer.Typer(no_args_is_help=True, help="The database.")
-reader_app = typer.Typer(no_args_is_help=True, help="Readers.")
-plugin_app = typer.Typer(no_args_is_help=True, help="Plugins and their Revisions.")
-channel_app = typer.Typer(no_args_is_help=True, help="Channels and their Plugin Bindings.")
+log = structlog.get_logger(__name__)
+
+# Keys in Click's `ctx.meta`, which every context of one invocation shares.
+_LOG_PATH = "news.log_path"
+# Only the names resolved so far: a failure in the root callback records just the group.
+_COMMAND_NAMES = "news.command_names"
+
+
+# These methods receive Typer's vendored Click Context, which has no public import path,
+# hence `Any`.
+class _CommandGroup(TyperGroup):
+    """Records the names of the subcommands being run, e.g. `channel bind`."""
+
+    def resolve_command(self, ctx: Any, args: list[str]) -> Any:
+        name, command, rest = super().resolve_command(ctx, args)
+        ctx.meta.setdefault(_COMMAND_NAMES, []).append(name)
+        return name, command, rest
+
+
+class _TopLevelGroup(_CommandGroup):
+    """Reports every command's failures in one place, pointing to the log file."""
+
+    def invoke(self, ctx: Any) -> Any:
+        try:
+            return super().invoke(ctx)
+        except typer.Exit, typer.Abort, typer.TyperException:
+            raise
+        except EXPECTED_FAILURES as error:
+            for line in expected_failure_lines(error, ctx.meta[_LOG_PATH]):
+                typer.echo(line, err=True)
+            raise typer.Exit(code=1) from error
+        except Exception as error:
+            # The path is unset only if working it out failed, before logging was configured.
+            log_path: Path | None = ctx.meta.get(_LOG_PATH)
+            if log_path is not None:
+                log.error(
+                    "cli.unexpected_error",
+                    command=" ".join(ctx.meta.get(_COMMAND_NAMES, [])),
+                    exc_info=error,
+                )
+            typer.echo(unexpected_error_line(error, log_path), err=True)
+            raise typer.Exit(code=1) from error
+
+
+app = typer.Typer(cls=_TopLevelGroup, no_args_is_help=True, help="Manage the news app's data.")
+db_app = typer.Typer(cls=_CommandGroup, no_args_is_help=True, help="The database.")
+reader_app = typer.Typer(cls=_CommandGroup, no_args_is_help=True, help="Readers.")
+plugin_app = typer.Typer(
+    cls=_CommandGroup, no_args_is_help=True, help="Plugins and their Revisions."
+)
+channel_app = typer.Typer(
+    cls=_CommandGroup, no_args_is_help=True, help="Channels and their Plugin Bindings."
+)
 app.add_typer(db_app, name="db")
 app.add_typer(reader_app, name="reader")
 app.add_typer(plugin_app, name="plugin")
@@ -62,6 +106,7 @@ def main(
 def _open_log_file(ctx: typer.Context, log_file: Path | None) -> TextIO:
     """Open the log file for appending, or exit before any work if it can't be opened."""
     path = resolve_log_path(log_file, os.environ.get("XDG_STATE_HOME"), Path.home())
+    ctx.meta[_LOG_PATH] = path
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
         stream = path.open("a", encoding="utf-8")
@@ -77,15 +122,10 @@ def _open_log_file(ctx: typer.Context, log_file: Path | None) -> TextIO:
 
 @contextmanager
 def _transaction(ctx: typer.Context) -> Generator[Session]:
+    """Commit on exit. Commands print their results after it, so output means committed."""
     engine: Engine = ctx.obj
     with Session(engine) as session, session.begin():
         yield session
-
-
-def _fail(errors: list[FieldError]) -> typer.Exit:
-    for error in errors:
-        typer.echo(f"{error.field or '(root)'}: {error.message}", err=True)
-    return typer.Exit(code=1)
 
 
 def _parse_config(value: str) -> dict[str, Any]:
@@ -109,8 +149,8 @@ def db_upgrade(ctx: typer.Context) -> None:
 def reader_create(ctx: typer.Context, name: str) -> None:
     """Create a Reader and print its id."""
     with _transaction(ctx) as session:
-        reader = create_reader(session, name)
-        typer.echo(reader.id)
+        reader_id = create_reader(session, name).id
+    typer.echo(reader_id)
 
 
 @plugin_app.command("create")
@@ -124,27 +164,17 @@ def plugin_create(
 ) -> None:
     """Create a Plugin from a Manifest and code files, and print its first Revision's id."""
     files = {path.name: path.read_text() for path in code}
-    try:
-        with _transaction(ctx) as session:
-            revision = create_plugin(session, reader, manifest.read_text(), files)
-            typer.echo(revision.id)
-    except PluginRevisionRejected as error:
-        raise _fail(error.errors) from error
-    except ReaderNotFound as error:
-        typer.echo(str(error), err=True)
-        raise typer.Exit(code=1) from error
+    with _transaction(ctx) as session:
+        revision_id = create_plugin(session, reader, manifest.read_text(), files).id
+    typer.echo(revision_id)
 
 
 @channel_app.command("create")
 def channel_create(ctx: typer.Context, reader: ReaderOption, name: str) -> None:
     """Create a Channel with no Plugin Bindings and print its id."""
-    try:
-        with _transaction(ctx) as session:
-            channel = create_channel(session, reader, name)
-            typer.echo(channel.id)
-    except ReaderNotFound as error:
-        typer.echo(str(error), err=True)
-        raise typer.Exit(code=1) from error
+    with _transaction(ctx) as session:
+        channel_id = create_channel(session, reader, name).id
+    typer.echo(channel_id)
 
 
 @channel_app.command("bind")
@@ -159,12 +189,6 @@ def channel_bind(
     ],
 ) -> None:
     """Bind a Plugin Revision into a Channel, creating a new Channel Revision."""
-    try:
-        with _transaction(ctx) as session:
-            revision = bind_plugin(session, reader, channel, plugin_revision, config)
-            typer.echo(f"Saved Channel Revision {revision.number}.")
-    except ChannelRevisionRejected as error:
-        raise _fail(error.errors) from error
-    except ChannelNotFound as error:
-        typer.echo(str(error), err=True)
-        raise typer.Exit(code=1) from error
+    with _transaction(ctx) as session:
+        revision_number = bind_plugin(session, reader, channel, plugin_revision, config).number
+    typer.echo(f"Saved Channel Revision {revision_number}.")

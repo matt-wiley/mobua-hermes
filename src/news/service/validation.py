@@ -10,12 +10,13 @@ class FieldError:
     field: str
     message: str
 
+    def __str__(self) -> str:
+        return f"{self.field or '(root)'}: {self.message}"
+
 
 class ValidationRejected(Exception):
     """Input rejected for one or more field errors, all reported together."""
 
     def __init__(self, errors: list[FieldError]) -> None:
-        super().__init__(
-            "; ".join(f"{error.field or '(root)'}: {error.message}" for error in errors)
-        )
+        super().__init__("; ".join(map(str, errors)))
         self.errors = errors
