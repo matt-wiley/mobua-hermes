@@ -2,7 +2,7 @@
 slug: design-consistency-pass
 external: null
 confirmed: true
-spec_written: false
+spec_written: true
 ---
 # Grill: Design consistency pass
 

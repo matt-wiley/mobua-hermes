@@ -18,7 +18,7 @@ Glossary for the personal news app: an RSS-style aggregator with custom retrieva
 - **Source Reference**: Where a News Item's information came from: URL, title, publisher, retrieved-at. Every News Item needs at least one, original reporting first; items without one are rejected at ingest.
 - **Feed**: A Channel's internal, short-term store of News Items. Items are marked used once an Article covers them and dropped after the Retention Window.
 - **Retention Window**: How long a Channel keeps News Items. Beyond it, past Articles are the record of what was seen.
-- **Collection**: On the Collection cadence, a Channel starts a Plugin Run for each of its Plugins in parallel. Complete when every Plugin Run has ended and the Channel has ingested the News Items received. Marked partial if any Plugin Run failed.
+- **Collection**: On the Collection cadence, a Channel starts a Plugin Run for each of its Plugin Bindings in parallel. Complete when every Plugin Run has ended and the Channel has ingested the News Items of the successful runs. Marked partial if any Plugin Run failed.
 - **Catch-up**: When a Channel wakes after missing scheduled runs, it runs each overdue cadence once instead of replaying every missed slot, Collection before Publish.
 - **Run Lease**: A Channel's database lock held while a Collection or Publish is in progress. A run that comes due meanwhile waits until the lease is released, rather than being dropped; the lease expires after a timeout.
 - **Channel Health**: A Channel's record of problems that need the Reader's attention: failed Plugin Runs, rejected News Items, refused Channel Model calls, missing Plugin Bindings. Shown in the Core so a broken Channel gets noticed; links to the logs of the Plugin Runs it flags.
