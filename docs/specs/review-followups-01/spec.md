@@ -1,7 +1,7 @@
 ---
 slug: review-followups-01
 title: Follow-ups from the ticket 01 code review
-status: draft
+status: done
 created: 2026-10-17
 adrs:
   - docs/adr/0007-all-data-scoped-to-a-reader.md
@@ -14,6 +14,13 @@ external: null
 ---
 
 # Follow-ups from the ticket 01 code review
+
+## Completion
+
+Code complete on 2026-10-17: all six tickets are done and have passing reviews,
+covering AC-1 through AC-21. See [the consolidated completion report](report.md)
+for review provenance, retained minor findings and deployment verification.
+Deployment remains unverified.
 
 ## Intent
 The code review of design-consistency-pass-01 (`docs/specs/design-consistency-pass/report.md`) found one major gap and a set of minor ones. The major gap, a Reader binding another Reader's Plugin Revision, is already fixed in `d664747`. This spec closes the minor findings before later tickets build on top of them:

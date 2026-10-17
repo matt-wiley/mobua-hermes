@@ -1,58 +1,65 @@
-# Code-complete report: review-followups-01-06, Revision update guard and rejection tests
+# Completion report: review-followups-01
 
-- **Covers:** `b829abe..036d8b67b07cce3cfaf60f9afe7a462ef8691f35` on branch `feat/design-consistency-pass--codex-test`.
-- **Spec:** `docs/specs/review-followups-01/spec.md`.
-- **Tickets:** review-followups-01-06 (done). This review covers ticket 06 only. The tickets 01–05 report is preserved at `4a16409:docs/specs/review-followups-01/report.md`.
-- **Sync:** n/a; the ticket has `external: null`.
+- **Implementation covered:** `945315f..c4b0769cfb5fea8cc3aabd41b4109e52bf7917ed` on `feat/design-consistency-pass--codex-test`.
+- **Spec:** [spec.md](spec.md), status `done`.
+- **Tickets:** review-followups-01-01 through review-followups-01-06, all `done`.
+- **Sync:** n/a; all six tickets have `external: null`. No external tracker updates were made.
 - **Date:** 2026-10-17.
 
 ## Verdict
 
-**CODE COMPLETE (ticket 06 only):** all three independent review axes pass with no findings, all configured gates pass, and the previously reported AC-20 test gap is resolved.
+**CODE COMPLETE:** all six tickets have passing reviews and collectively cover AC-1 through AC-21. The last outstanding major, ticket 06's pending current-Revision relationship assertion gap, is fixed and independently re-reviewed. The latest configured gates passed, including 147 tests.
 
-Three fresh-context reviewers independently assessed Standards, Spec and Code-complete evidence. They made no repository edits. This report replaces the failing review preserved at `ff21cdd:docs/specs/review-followups-01/report.md`; it does not re-review tickets 01–05 or certify the entire feature.
+This closeout consolidates completed ticket reviews; it is not a new independent review of the entire implementation. The earlier reviews' minor findings remain recorded as non-blocking follow-ups. Code complete is not deployment verified.
 
-## Findings
+## Review provenance and criterion coverage
 
-No blockers, majors or minors were found.
+The complete ticket reports are preserved under `reviews/`, including their findings, test mappings, category explanations, gate results and verification limits. Historical reports retain the state and line numbers at which they were written; later work may supersede individual findings.
+
+| Ticket | Acceptance criteria | Passing review source | Evidence |
+|---|---|---|---|
+| [01: CLI log file](tickets/01-cli-logs-to-a-file.md) | AC-9, AC-10, AC-11, AC-14 | [reviews/01.md](reviews/01.md), from `01e4f81` | [evidence/01.md](evidence/01.md) |
+| [02: CLI failures and transaction output](tickets/02-cli-error-reporting-and-commit-order.md) | AC-12, AC-13, AC-18 | [reviews/02.md](reviews/02.md), from `a13fabd` | [evidence/02.md](evidence/02.md) |
+| [03: Validation errors and service failures](tickets/03-error-types-service-logging-and-reader-check.md) | AC-15, AC-16, AC-17, AC-19 | [reviews/03.md](reviews/03.md), from `d16e591` | [evidence/03.md](evidence/03.md) |
+| [04: Packaged migrations](tickets/04-migrations-inside-the-package.md) | AC-6, AC-7, AC-8 | [reviews/04.md](reviews/04.md), from `b8af337` | [evidence/04.md](evidence/04.md) |
+| [05: Declared table scopes](tickets/05-declared-table-scopes.md) | AC-1, AC-2, AC-3, AC-21 | [reviews/05.md](reviews/05.md), from `b829abe` | [evidence/05.md](evidence/05.md) |
+| [06: Revision guard and rejection checks](tickets/06-revision-update-guard-and-rejection-tests.md) | AC-4, AC-5, AC-20 | [reviews/06.md](reviews/06.md), preserved at `c4b0769` | [evidence/06.md](evidence/06.md) |
+
+All 21 criteria have an owner and a passing review; all declared ticket dependencies are done. Categories that do not apply and the recorded red steps are explained in the linked reports/evidence rather than inferred from a passing test count.
+
+Ticket 06 was reviewed at pre-squash head `036d8b6`. The reviewed file tree was verified unchanged after its follow-up commits and passing report were squashed into `c4b0769`. The backup branch `backup/feat/design-consistency-pass--codex-test-presquash-20261017-184952` preserves those commits and the historical report references.
+
+## Findings carried forward
+
+No unresolved blocker or major remains in the passing ticket reviews. This closeout does not claim that all earlier minor findings were fixed. Their full sources and suggested fixes are retained in the archived reports.
 
 ### Standards
 
-**PASS.** The ORM event listener, attribute-history checks, contextual exception and narrow scope match the baseline and repository standards. The follow-up assertion checks the relationship before autoflush and the foreign key afterward. Configured and locked dependency majors match the standards snapshot.
+- [Ticket 01](reviews/01.md): CLI help/completion can open the log file, default help text is manual, and the repo configuration's observability wording/test-count comment needs refreshing.
+- [Tickets 01–03](reviews/01.md): standards-library coverage for dependencies such as Typer, structlog, jsonschema, Pydantic and Alembic remains follow-up work. The configured stack's majors match the pinned snapshot; missing library entries were not treated as blockers.
+- [Ticket 03](reviews/03.md): binding-config comment placement and Reader attribution on the existing Channel rejection log were noted. Ticket 02 addressed some earlier message-format duplication; the original findings remain available.
+- [Ticket 04](reviews/04.md): the developer Alembic path could report a missing `NEWS_DATABASE_URL` more clearly. Disposal and config cleanup were accepted as justified.
+- [Ticket 05](reviews/05.md): redundant schema assertions and the test checking an old name's absence were accepted as minor.
 
 ### Spec
 
-**PASS.** The actual tests satisfy AC-4, AC-5 and AC-20. Inserts and allowed pointer moves remain supported; deletes are outside the guard's scope. No unrelated behavior was added.
-
-The previous AC-20 finding at `tests/service/test_channels.py:51` is resolved by `2f23924`. The helper now checks the relationship and foreign key under `session.no_autoflush`, then checks the foreign key again after its count query. An independent scratch mutation inserted `channel.current_revision = None` into the rejected-save branch. Both service rejection tests failed at the relationship assertion, before rollback, as required. The service implementation itself was not changed by this fix.
+- [Tickets 01 and 03](reviews/01.md): document empty/relative XDG handling and the `(root)` validation-message convention more explicitly; improve the unopenable-file message for an `OSError` without `strerror`.
+- [Ticket 04](reviews/04.md): migration tests could explicitly pin their working directory and independently establish the expected migration head.
+- [Ticket 05](reviews/05.md): the foreign-key-target test can be strengthened to distinguish migrated-database inspection from model metadata; ticket 05's verification bullets can be aligned with the two amended scope rules.
+- Ticket 02 records its minor fixes and their limits in [reviews/02.md](reviews/02.md). The pending-pointer finding from ticket 06 is closed by the independently verified relationship assertion before autoflush and foreign-key recheck afterward.
 
 ### Code-complete evidence
 
-**PASS.** Tests, category explanations, red excerpts and passing runs are recorded in `evidence/06.md`. Historical failing runs cannot be authenticated from Git, but the recorded chronology agrees with the commits. The Spec reviewer independently reproduced the new mutation failure.
+- [Ticket 01](reviews/01.md): root execution of the permission test, an existing database remaining untouched, directory-path error assertions, default-path command assertions and an empty log-file environment variable were noted as additional test coverage opportunities.
+- [Ticket 05](reviews/05.md): a modelled table with missing scope metadata lacks its own integration case; the main evidence test count predates two later cases.
+- Earlier per-evidence deployment-checklist gaps are covered by the archived reports and the consolidated checklist below. Historical red execution cannot be authenticated from Git; the ticket 06 relationship mutation was independently reproduced during review.
+- Existing server logging initialization and container log persistence remain deployment follow-ups. No production/server/container behavior is certified here.
 
-No tests were deleted, weakened or skipped. Tests use real migrated SQLite databases and separate connections; the CLI check uses a separate engine. Scratch mutation instrumentation is evidence generation and is not imported by the normal suite.
-
-## Criteria evidence
-
-| Criterion | Tests (names) | Happy | Failure | Boundary | Edge | Red-first | Green |
-|---|---|---|---|---|---|---|---|
-| AC-4 | `test_changing_a_committed_row_is_rejected_and_leaves_it_stored_unchanged` (three models), `test_every_changed_attribute_is_named`, `test_repointing_a_binding_through_its_relationship_is_rejected`, unchanged-value and pending-insert tests | yes | guard is the failure path; existing CLI handler covers logging | yes | yes | stub and relationship-slice red excerpts recorded | yes |
-| AC-5 | `test_creating_and_binding_still_succeed_with_the_guard_active`, Channel and Plugin current-pointer move tests, deletion and changed-then-deleted tests | yes | n/a: permitted operations | n/a: no input range | yes | overbroad-guard mutation recorded | yes |
-| AC-20 | `test_binding_missing_a_required_field_is_rejected_and_no_revision_is_created`, `test_one_invalid_binding_rejects_the_whole_revision`, `test_binding_with_invalid_config_reports_field_errors_and_saves_nothing` | n/a: rejection criterion | yes | one and two Bindings | flushed Revision and pending relationship-only mutation | bad-save and pointer-mutation evidence recorded; pointer mutation independently reproduced | yes |
-
-Implementation and evidence commits:
-- `96cc701`: guard and its tests committed together.
-- `a0cd970`: stronger rejection-state checks.
-- `4a16409`: original evidence and ticket status.
-- `ff21cdd`: first independent review and its AC-20 finding.
-- `2f23924`: relationship assertion before autoflush and foreign-key recheck.
-- `036d8b6`: follow-up evidence and ticket verification update.
-
-The CLI check observes committed state after its transaction handler exits. The two service tests provide the required checks before rollback, including an empty pending-object set, unchanged relationship/pointer and same-session plus separate-connection Revision counts.
+These are retained follow-ups, not new acceptance criteria or claims of newly re-tested defects. No production or test code changed during closeout.
 
 ## Gates
 
-The evidence reviewer independently ran all configured gates. Formatting and import checks initially encountered sandbox restrictions on uv's cache; they passed with approved cache access.
+The latest independent ticket 06 review ran the complete configured gates against the implementation now represented by `c4b0769`:
 
 | Gate | Command | Result |
 |---|---|---|
@@ -60,31 +67,45 @@ The evidence reviewer independently ran all configured gates. Formatting and imp
 | Lint | `uv run ruff check .` | pass |
 | Formatting | `uv run ruff format --check .` | pass, 119 files already formatted |
 | Layering | `uv run lint-imports` | pass, 1 contract kept, 0 broken |
-| Full suite | `uv run pytest` | pass, 147 tests in 3.23s, including wheel packaging |
+| Full suite | `uv run pytest` | pass, 147 tests, including wheel packaging |
 
-Standards and Spec also independently ran the three affected test files: 57 passed. The Spec review's scratch pointer mutation produced 2 failures and 15 deselections, both failures at the expected relationship assertion.
+The Standards and Spec reviewers also independently ran 57 tests in the affected files. The Spec review's scratch pointer mutation caused both service rejection tests to fail at the expected assertion.
+
+This closeout changes Markdown only. Checks performed for closeout: all tickets are done, declared dependencies are satisfied, acceptance-criterion coverage is exactly AC-1 through AC-21, archived reviews match their source reports, local Markdown links resolve, and `git diff --check` passes. Runtime gates were not repeated for this documentation-only change.
 
 ## Observability delivered
 
-- **Logs:** none new, as specified by ticket 06. `ImmutableRevisionError` propagates as a programming error. The existing CLI handler logs `cli.unexpected_error` with command and traceback; its existing tests cover that behavior.
-- **Metrics:** none, explicitly outside scope.
-- **Known limit:** in-place plain JSON changes are not tracked and do not persist through that mutation alone. Whole-value reassignment is tracked and rejected. The required limitation is recorded in `evidence/06.md`.
+- CLI logs append JSON lines to `--log-file` / `NEWS_CLI_LOG_FILE`, defaulting under `$XDG_STATE_HOME/news/` or `~/.local/state/news/`. CLI stdout carries command results only.
+- Service failure events: `plugin_revision.rejected` with Reader/errors, `channel.not_found` with Reader/Channel, and `reader.not_found` with Reader, all at `info`. Existing `channel_revision.rejected` remains.
+- Unexpected CLI exceptions produce `error cli.unexpected_error` with command and traceback, except before a log path is available. Expected failures give their message and log-file pointer.
+- The default `configure_logging()` stdout behavior remains tested for server use; actual server initialization is not verified by this closeout.
+- No new metrics, as specified. The guard propagates a contextual programming error through the existing CLI unexpected-error handler.
+- In-place plain JSON mutation is not tracked; whole-value reassignment is tracked and rejected. Deletes and direct bulk/raw SQL enforcement are outside the guard's scope.
 
 ## Not verified
 
-Code complete is not deployment verified. This review did **not** verify:
+Code complete is not deployment verified. This closeout did **not** verify:
 
-- Deployment, production data or traffic, a container image or container logs.
+- Deployment, production traffic/data, container startup, server logging initialization or persistent container CLI logs.
 - Postgres; dedicated validation belongs to design-consistency-pass-21.
-- Actual historical execution of the recorded red steps.
-- Database-level enforcement or bulk/raw SQL updates: the agreed mechanism is an ORM `before_flush` tripwire. Deletes are outside its scope.
-- Tickets 01–05 or the complete feature beyond this ticket's diff.
-- A live CLI invocation specifically triggering `ImmutableRevisionError`; the guard and the existing generic CLI error handler are tested separately.
+- Installed-wheel behavior in the target environment. Automated packaging checks and the earlier local smoke are documented in ticket 04.
+- Real disk-full or I/O failures at COMMIT; tests use a deferred foreign-key violation to exercise commit failure and a separate lock to exercise flush failure.
+- Actual historical execution of recorded red runs, or independent re-review of every minor fix described in the earlier reports.
+- A live CLI command specifically triggering `ImmutableRevisionError`; the guard and generic CLI handler are tested separately.
+- Work explicitly excluded by the spec: plugin drafts, container image configuration, metrics and API routes.
+- Resolution of the retained minor findings. They do not block the existing passing ticket verdicts.
 
 ## Deployment verification checklist
 
-Use a disposable migrated database in the target environment for mutation checks.
+Use disposable data for failure and mutation checks. Record the target environment and results when performing these checks.
 
-- [ ] **ORM guard:** load a committed Plugin Revision, Channel Revision and Plugin Binding in turn; change a scalar attribute (reassign the whole config value for a Binding) and flush. Each raises `ImmutableRevisionError` naming the table and attribute. Roll back and read through a separate connection; the stored row is unchanged.
-- [ ] **Permitted operations:** normal create/bind succeeds. Move a Channel's and a Plugin's current-Revision pointer to an existing Revision; a separate connection observes the new pointer.
-- [ ] **CLI rejection:** bind a valid owned Plugin Revision with config missing a required field. Expect exit 1, empty stdout, field errors and `Logged to <path>.` on stderr, and `channel_revision.rejected` in that JSON log file. Separate database queries show unchanged Revision/Binding counts and the original pointer.
+- [ ] **Installed wheel:** build/install into a clean Python 3.14 venv outside the source checkout. Run `news --database-url sqlite:///x.db db upgrade` twice; both exit 0. The database reports migration `d2ebcc45139c`, and CLI stdout carries only command output.
+- [ ] **Developer migration path:** from the repository root, point `NEWS_DATABASE_URL` at a migrated disposable database and run `uv run alembic check`; expect no new upgrade operations.
+- [ ] **Successful writes:** create a Reader, Plugin and Channel, then bind a valid Plugin Revision. Output reports success and independent queries observe the committed rows/current Revision.
+- [ ] **Invalid bind:** missing required config exits 1 with empty stdout, field errors and `Logged to <path>.` on stderr. The JSON log contains `channel_revision.rejected`. Revision/Binding counts and the current pointer stay unchanged.
+- [ ] **Unknown Reader/Channel and invalid Manifest:** exercise each CLI path. Expect exit 1, its specific error and log pointer, the appropriate `reader.not_found`, `channel.not_found` or `plugin_revision.rejected` JSON event with contextual fields, and no new rows. Another Reader's Channel is treated as unavailable.
+- [ ] **Log destination/append:** explicit option overrides the environment; unset both to check XDG/home fallback. Log entries contain `event`, `level` and `timestamp`; a second logging command appends without removing earlier entries.
+- [ ] **Unopenable log file:** as a non-root user use an unwritable parent; as root use a read-only mount. Expect exit 1 before database work, with path, OS error and overrides on stderr. Check both a nonexistent database and an unchanged existing database.
+- [ ] **Unexpected failure:** hold a SQLite write lock from another connection, run a writing CLI command, then release the lock. Expect exit 1, empty stdout, one unexpected-error stderr line and `cli.unexpected_error` containing command/traceback; no inserted row persists. On disposable data, separately exercise a deferred-constraint COMMIT failure and expect the same absence of success output/persisted rows.
+- [ ] **ORM guard:** change a committed Plugin Revision, Channel Revision and Plugin Binding in turn; flush raises `ImmutableRevisionError` naming table/attribute. Roll back and independently verify unchanged rows. New Revisions/Bindings and allowed current-pointer moves succeed.
+- [ ] **Container follow-up:** once the container ticket configures `NEWS_CLI_LOG_FILE=/data/logs/cli.log`, verify CLI log persistence across restarts and server JSON on `docker logs <container>`, with no new migration/model warnings.
