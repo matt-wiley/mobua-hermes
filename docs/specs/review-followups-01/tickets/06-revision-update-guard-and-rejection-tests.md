@@ -1,7 +1,7 @@
 ---
 id: review-followups-01-06
 title: Revision update guard and stronger rejection tests
-status: todo
+status: done
 blocked_by: [review-followups-01-03]
 external: null
 ---
