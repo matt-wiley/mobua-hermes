@@ -1,7 +1,9 @@
+import json
 import uuid
-from collections.abc import Generator
+from collections.abc import Generator, Iterator
 from contextlib import contextmanager
 from pathlib import Path
+from typing import Any
 
 import pytest
 from sqlalchemy import func, select
@@ -49,7 +51,27 @@ def news(database_url: str, *args: str) -> Result:
 
 def created_id(result: Result) -> str:
     assert result.exit_code == 0, result.output
-    return result.stdout.strip().splitlines()[-1]
+    return str(uuid.UUID(result.stdout.strip()))
+
+
+def bind(database_url: str, reader: str, channel: str, plugin_revision: str, config: str) -> Result:
+    return news(
+        database_url,
+        "channel",
+        "bind",
+        "--reader",
+        reader,
+        "--channel",
+        channel,
+        "--plugin-revision",
+        plugin_revision,
+        "--config",
+        config,
+    )
+
+
+def log_lines(path: Path) -> list[dict[str, Any]]:
+    return [json.loads(line) for line in path.read_text().splitlines()]
 
 
 def setup_channel(database_url: str, plugin_files: tuple[Path, Path]) -> tuple[str, str, str]:
@@ -222,3 +244,133 @@ def test_binding_to_an_unknown_channel_is_reported(
 
     assert result.exit_code == 1
     assert "no Channel" in result.stderr
+
+
+def test_log_lines_go_to_the_file_named_by_the_environment_and_stdout_has_none(
+    database_url: str, plugin_files: tuple[Path, Path], log_file: Path
+) -> None:
+    reader, plugin_revision, channel = setup_channel(database_url, plugin_files)
+
+    result = bind(database_url, reader, channel, plugin_revision, "{}")
+
+    assert result.exit_code == 1
+    assert result.stdout == ""
+    [line] = log_lines(log_file)
+    assert line["event"] == "channel_revision.rejected"
+    assert line["level"] == "info"
+    assert line["channel_id"] == channel
+    assert "timestamp" in line
+
+
+def test_the_log_file_option_wins_over_the_environment(
+    database_url: str, plugin_files: tuple[Path, Path], log_file: Path, tmp_path: Path
+) -> None:
+    reader, plugin_revision, channel = setup_channel(database_url, plugin_files)
+    log_file.unlink()
+    option_file = tmp_path / "option" / "cli.log"
+
+    result = runner.invoke(
+        app,
+        [
+            "--database-url",
+            database_url,
+            "--log-file",
+            str(option_file),
+            *["channel", "bind", "--reader", reader, "--channel", channel],
+            *["--plugin-revision", plugin_revision, "--config", "{}"],
+        ],
+    )
+
+    assert result.exit_code == 1
+    assert [line["event"] for line in log_lines(option_file)] == ["channel_revision.rejected"]
+    assert not log_file.exists()
+
+
+def test_logs_default_to_the_xdg_state_directory(
+    database_url: str,
+    plugin_files: tuple[Path, Path],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    reader, plugin_revision, channel = setup_channel(database_url, plugin_files)
+    monkeypatch.delenv("NEWS_CLI_LOG_FILE")
+    monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path / "state"))
+
+    bind(database_url, reader, channel, plugin_revision, "{}")
+
+    lines = log_lines(tmp_path / "state" / "news" / "cli.log")
+    assert [line["event"] for line in lines] == ["channel_revision.rejected"]
+
+
+def test_logs_fall_back_to_local_state_under_home_without_xdg_state_home(
+    database_url: str,
+    plugin_files: tuple[Path, Path],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    reader, plugin_revision, channel = setup_channel(database_url, plugin_files)
+    monkeypatch.delenv("NEWS_CLI_LOG_FILE")
+    monkeypatch.delenv("XDG_STATE_HOME", raising=False)
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+
+    bind(database_url, reader, channel, plugin_revision, "{}")
+
+    lines = log_lines(tmp_path / "home" / ".local" / "state" / "news" / "cli.log")
+    assert [line["event"] for line in lines] == ["channel_revision.rejected"]
+
+
+def test_a_second_command_appends_to_the_log_file(
+    database_url: str, plugin_files: tuple[Path, Path], log_file: Path
+) -> None:
+    reader, plugin_revision, channel = setup_channel(database_url, plugin_files)
+    bind(database_url, reader, channel, plugin_revision, "{}")
+    [first] = log_file.read_text().splitlines()
+
+    bind(database_url, reader, channel, plugin_revision, "{}")
+
+    lines = log_file.read_text().splitlines()
+    assert len(lines) == 2
+    assert lines[0] == first
+    for line in log_lines(log_file):
+        assert {"event", "level", "timestamp"} <= line.keys()
+
+
+@pytest.fixture
+def read_only_dir(tmp_path: Path) -> Iterator[Path]:
+    directory = tmp_path / "ro"
+    directory.mkdir(mode=0o500)
+    yield directory
+    directory.chmod(0o700)
+
+
+def test_an_unopenable_log_file_fails_before_touching_the_database(
+    tmp_path: Path, read_only_dir: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    path = read_only_dir / "logs" / "cli.log"
+    monkeypatch.setenv("NEWS_CLI_LOG_FILE", str(path))
+    database = tmp_path / "fresh.db"
+
+    result = news(f"sqlite:///{database}", "db", "upgrade")
+
+    assert result.exit_code == 1
+    assert result.stdout == ""
+    assert str(path) in result.stderr
+    assert "Permission denied" in result.stderr
+    assert "--log-file" in result.stderr
+    assert "NEWS_CLI_LOG_FILE" in result.stderr
+    assert not database.exists()
+
+
+def test_a_log_file_path_that_is_a_directory_is_reported(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    path = tmp_path / "a-directory"
+    path.mkdir()
+    monkeypatch.setenv("NEWS_CLI_LOG_FILE", str(path))
+    database = tmp_path / "fresh.db"
+
+    result = news(f"sqlite:///{database}", "db", "upgrade")
+
+    assert result.exit_code == 1
+    assert str(path) in result.stderr
+    assert not database.exists()

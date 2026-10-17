@@ -1,16 +1,18 @@
 """The `news` command line: thin commands over the service layer (ADR 0017)."""
 
 import json
+import os
 import uuid
 from collections.abc import Generator
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Annotated, Any
+from typing import Annotated, Any, TextIO
 
 import typer
 from sqlalchemy import Engine
 from sqlalchemy.orm import Session
 
+from news.cli.log_file import resolve_log_path
 from news.service.binding_config import ConfigError
 from news.service.channels import (
     ChannelNotFound,
@@ -43,11 +45,34 @@ def main(
     database_url: Annotated[
         str, typer.Option(envvar="NEWS_DATABASE_URL", help="SQLAlchemy database URL.")
     ] = "sqlite:///news.db",
+    log_file: Annotated[
+        Path | None,
+        typer.Option(
+            envvar="NEWS_CLI_LOG_FILE",
+            help="Where to append JSON log lines. [default: $XDG_STATE_HOME/news/cli.log]",
+        ),
+    ] = None,
 ) -> None:
-    configure_logging()
+    configure_logging(stream=_open_log_file(ctx, log_file))
     engine = create_engine_for(database_url)
     ctx.call_on_close(engine.dispose)
     ctx.obj = engine
+
+
+def _open_log_file(ctx: typer.Context, log_file: Path | None) -> TextIO:
+    """Open the log file for appending, or exit before any work if it can't be opened."""
+    path = resolve_log_path(log_file, os.environ.get("XDG_STATE_HOME"), Path.home())
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        stream = path.open("a", encoding="utf-8")
+    except OSError as error:
+        typer.echo(
+            f"Cannot open log file {path}: {error.strerror}. "
+            "Choose another with --log-file or NEWS_CLI_LOG_FILE.",
+            err=True,
+        )
+        raise typer.Exit(code=1) from error
+    return ctx.with_resource(stream)
 
 
 @contextmanager

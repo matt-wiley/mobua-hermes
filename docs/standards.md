@@ -132,7 +132,7 @@ These rules apply to this repo and take precedence over the library sections abo
 - Layering: `api/` and `cli/` may import `service/` but never each other, and `service/` imports neither. import-linter enforces this in `lint` (ADR 0017).
 - Keep the database portable between SQLite and Postgres. Don't use SQLite-only or Postgres-only SQL features without a fallback, so use generic `JSON`, not `sqlite.JSONB` (ADR 0013). SQLite runs in WAL mode (ADR 0017).
 - Scope every row by Reader, and by Channel where it belongs to one. Enforce this in the service layer, because the database doesn't (ADRs 0007, 0013).
-- Logging: structlog, as JSON to stdout. Never log Secrets, LLM Provider keys, Gateway tokens or the Master Key, and never write them to disk (ADR 0009).
+- Logging: structlog, as JSON lines. The server process writes them to stdout; the CLI appends them to its log file (`--log-file` / `NEWS_CLI_LOG_FILE`, default `$XDG_STATE_HOME/news/cli.log`, else `~/.local/state/news/cli.log`), so CLI stdout carries only command output. Never log Secrets, LLM Provider keys, Gateway tokens or the Master Key, and never write them to disk (ADR 0009).
 - Metrics: prometheus-client, exposed at `/metrics`.
 - Serve the Web App with `app.frontend()`. The fallback filename must match `adapter-static`'s `fallback` (see the web section), e.g. `app.frontend("/", directory=<build dir>, fallback="200.html")`.
 - LLM calls go only through the service layer's LLM Gateway, never directly to provider SDKs from Channel or Plugin code (ADRs 0008, 0012).

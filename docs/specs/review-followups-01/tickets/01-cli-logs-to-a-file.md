@@ -1,7 +1,7 @@
 ---
 id: review-followups-01-01
 title: CLI writes its logs to a file
-status: todo
+status: done
 blocked_by: []
 external: null
 ---
