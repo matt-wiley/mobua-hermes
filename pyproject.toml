@@ -38,6 +38,10 @@ target-version = "py314"
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "B", "UP", "SIM", "RUF"]
 
+[tool.ruff.lint.isort]
+# The migrations folder at the repo root is also named alembic; the import is the library.
+known-third-party = ["alembic"]
+
 [tool.pyright]
 include = ["src", "tests", "alembic"]
 pythonVersion = "3.14"
