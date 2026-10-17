@@ -1,84 +1,90 @@
-# Code-complete report: review-followups-01-05, declared table scopes and schema rules
+# Code-complete report: review-followups-01-06, Revision update guard and rejection tests
 
-- **Covers:** `b8af337..ee99d2c` on branch `feat/design-consistency-pass`
-- **Spec:** `docs/specs/review-followups-01/spec.md`
-- **Tickets:** review-followups-01-05 (done). Earlier reports: ticket 01 at `01e4f81:docs/specs/review-followups-01/report.md`, ticket 03 at `d16e591:…`, ticket 02 at `a13fabd:…`, and ticket 04 at `b8af337:docs/specs/review-followups-01/report.md`. Ticket 06 is open and is **not** covered here.
-- **Sync:** n/a (no `external:` links)
-- **Date:** 2026-10-17
+- **Covers:** `b829abe..036d8b67b07cce3cfaf60f9afe7a462ef8691f35` on branch `feat/design-consistency-pass--codex-test`.
+- **Spec:** `docs/specs/review-followups-01/spec.md`.
+- **Tickets:** review-followups-01-06 (done). This review covers ticket 06 only. The tickets 01–05 report is preserved at `4a16409:docs/specs/review-followups-01/report.md`.
+- **Sync:** n/a; the ticket has `external: null`.
+- **Date:** 2026-10-17.
 
 ## Verdict
-**CODE COMPLETE** (ticket 01-05 only): all three axes pass, all gates are green, and every finding is minor.
 
-A first review at `6c40f38` (not committed) found one major: no test checked that `describe_tables` reads foreign-key targets from the migrated database. Commit `0dd0287` fixed it. With `Inspector.get_foreign_keys` patched to return `[]`, `test_foreign_key_targets_are_read_from_the_migrated_database` now fails. Commits `907beba` and `ee99d2c` dealt with that review's minors: `SCOPES` now comes from the `Scope` type, the parameter is no longer rebound, the own-id exemption requires an `id` column, and AC-2 was amended and the evidence's Observability and deployment notes were added.
+**CODE COMPLETE (ticket 06 only):** all three independent review axes pass with no findings, all configured gates pass, and the previously reported AC-20 test gap is resolved.
 
-The spec as a whole is not code complete until ticket 06 is done and reviewed.
+Three fresh-context reviewers independently assessed Standards, Spec and Code-complete evidence. They made no repository edits. This report replaces the failing review preserved at `ff21cdd:docs/specs/review-followups-01/report.md`; it does not re-review tickets 01–05 or certify the entire feature.
 
 ## Findings
-There are no blockers or majors. The minor findings are below.
+
+No blockers, majors or minors were found.
 
 ### Standards
-- [minor] `tests/service/test_schema.py:89-91`. Source: baseline §6 ("no dead code") and §1.
-  - `test_the_reader_scope_exemption_list_is_gone` uses `hasattr` to check that a name is absent. It guards no behaviour.
-  - It is acceptable to keep it, because the ticket's AC-3 verification asks for it literally. Already raised at `6c40f38`.
-  - Fix (optional): record a `grep` result in evidence/05.md and delete the test.
-- [minor] `tests/service/test_schema.py:27-34, 45-49`. Source: baseline §1 and §6.
-  - `test_every_migrated_table_declares_a_scope` and `test_alembic_version_counts_as_app_wide` are strict subsets of `test_scopes_match_the_design`.
-  - Each one is tagged to its own criterion, so this is cosmetic. Already raised at `6c40f38`.
-  - Fix (optional): fold them into `test_scopes_match_the_design` and tag it `AC-1, D-2, D-3`.
+
+**PASS.** The ORM event listener, attribute-history checks, contextual exception and narrow scope match the baseline and repository standards. The follow-up assertion checks the relationship before autoflush and the foreign key afterward. Configured and locked dependency majors match the standards snapshot.
 
 ### Spec
-- [minor] `tests/service/test_schema.py:77`. Source: the test name and evidence/05.md ("read from the migrated database").
-  - `test_foreign_key_targets_are_read_from_the_migrated_database` checks the target values, not where they come from. A `describe_tables` that read foreign keys from `Base.metadata` would still pass.
-  - The risk is low, because `compare_metadata` catches foreign-key drift between the models and the migrations.
-  - Fix: call `describe_tables` with a `MetaData` that keeps scope `info` but has no foreign keys, and assert the targets still match. Or rename the test so it only claims to pin the targets.
-- [minor] `docs/specs/review-followups-01/tickets/05-declared-table-scopes.md`, Verification, AC-2. Source: spec AC-2 as amended in `ee99d2c`.
-  - The spec now also lists "a `channel` table without `reader_id`" and "a declared scope other than `app`, `reader` or `channel` (D-3)". The ticket's AC-2 bullets still list only the original seven rules.
-  - Fix: add the two rules to the ticket.
+
+**PASS.** The actual tests satisfy AC-4, AC-5 and AC-20. Inserts and allowed pointer moves remain supported; deletes are outside the guard's scope. No unrelated behavior was added.
+
+The previous AC-20 finding at `tests/service/test_channels.py:51` is resolved by `2f23924`. The helper now checks the relationship and foreign key under `session.no_autoflush`, then checks the foreign key again after its count query. An independent scratch mutation inserted `channel.current_revision = None` into the rejected-save branch. Both service rejection tests failed at the relationship assertion, before rollback, as required. The service implementation itself was not changed by this fix.
 
 ### Code-complete evidence
-- [minor] `tests/schema_rules.py:84` (`_declared_scope`). Source: code-complete item 1 (failure modes at the edge).
-  - No integration test covers a modelled table whose `Table.info` has no scope. Only the unmodelled `stray` table is tested.
-  - Probe: changing `.get("scope")` to `.get("scope", "app")` passes all 27 schema tests. `test_scopes_match_the_design` partly guards this, because it pins the exact table set.
-  - Fix: add an edge test with a scope-less `Table` in a `MetaData` over a raw-SQL table, and assert `"<name>: no declared scope"`.
-- [minor] `docs/specs/review-followups-01/evidence/05.md:23-37`. Source: evidence accuracy.
-  - The main AC-2 list still shows 13 tests. The two added in `907beba` appear only under the follow-up section.
-  - Fix: fold them into the main list, or note "15 after follow-up".
+
+**PASS.** Tests, category explanations, red excerpts and passing runs are recorded in `evidence/06.md`. Historical failing runs cannot be authenticated from Git, but the recorded chronology agrees with the commits. The Spec reviewer independently reproduced the new mutation failure.
+
+No tests were deleted, weakened or skipped. Tests use real migrated SQLite databases and separate connections; the CLI check uses a separate engine. Scratch mutation instrumentation is evidence generation and is not imported by the normal suite.
 
 ## Criteria evidence
+
 | Criterion | Tests (names) | Happy | Failure | Boundary | Edge | Red-first | Green |
 |---|---|---|---|---|---|---|---|
-| AC-1 | `test_every_migrated_table_declares_a_scope`, `test_a_migrated_table_with_no_model_is_reported_as_undeclared`, `test_alembic_version_counts_as_app_wide`, `test_scopes_match_the_design` | yes | yes (stray table) | n/a: fixed schema | yes (`alembic_version`); a modelled table with no scope is not tested (minor) | yes | yes |
-| AC-2 | `tests/test_schema_rules.py`, 15 tests: one or more per listed rule, plus the two amended rules and the own-`id` column requirement | yes | yes | yes (empty input, unknown scope, several violations) | yes (foreign key from an `app` table; a `channel` table with a foreign key to a `reader` table is allowed) | yes (stub; 907beba follow-up red too) | yes |
-| AC-3 | `test_migrated_schema_has_no_scope_violations`, `test_scopes_match_the_design`, `test_foreign_key_targets_are_read_from_the_migrated_database`, `test_the_reader_scope_exemption_list_is_gone` | yes | via AC-1 and AC-2 | n/a: fixed schema | yes (foreign-key targets pinned on the real database) | yes; the foreign-key test by mutation (no foreign keys read) | yes |
-| AC-21 | `test_built_in_revision_reads_back_as_system_created_with_no_reader` | yes | n/a: no rejection path | yes (`None` Reader id on Plugin and Revision) | n/a | by mutation (`SYSTEM_CREATOR="seed"`); the behaviour already existed | yes |
-| Migration | `test_migrated_schema_matches_the_models` (unchanged) | yes | n/a | n/a | n/a | n/a: no DDL | yes |
+| AC-4 | `test_changing_a_committed_row_is_rejected_and_leaves_it_stored_unchanged` (three models), `test_every_changed_attribute_is_named`, `test_repointing_a_binding_through_its_relationship_is_rejected`, unchanged-value and pending-insert tests | yes | guard is the failure path; existing CLI handler covers logging | yes | yes | stub and relationship-slice red excerpts recorded | yes |
+| AC-5 | `test_creating_and_binding_still_succeed_with_the_guard_active`, Channel and Plugin current-pointer move tests, deletion and changed-then-deleted tests | yes | n/a: permitted operations | n/a: no input range | yes | overbroad-guard mutation recorded | yes |
+| AC-20 | `test_binding_missing_a_required_field_is_rejected_and_no_revision_is_created`, `test_one_invalid_binding_rejects_the_whole_revision`, `test_binding_with_invalid_config_reports_field_errors_and_saves_nothing` | n/a: rejection criterion | yes | one and two Bindings | flushed Revision and pending relationship-only mutation | bad-save and pointer-mutation evidence recorded; pointer mutation independently reproduced | yes |
 
-Commit order: tests were committed with or before the code (`f6c20c5` has the rules and their tests; `95c4163` has the model scopes and the schema tests). No tests were skipped or weakened. Three removed tests each have a replacement at least as strong.
+Implementation and evidence commits:
+- `96cc701`: guard and its tests committed together.
+- `a0cd970`: stronger rejection-state checks.
+- `4a16409`: original evidence and ticket status.
+- `ff21cdd`: first independent review and its AC-20 finding.
+- `2f23924`: relationship assertion before autoflush and foreign-key recheck.
+- `036d8b6`: follow-up evidence and ticket verification update.
 
-Mutation probes, all caught: no foreign keys read; own-`id` exemption by name alone; `channel` tables not needing `reader_id`; declared scopes ignored. The probe plugins are in the session scratchpad and are not committed.
+The CLI check observes committed state after its transaction handler exits. The two service tests provide the required checks before rollback, including an empty pending-object set, unchanged relationship/pointer and same-session plus separate-connection Revision counts.
 
 ## Gates
+
+The evidence reviewer independently ran all configured gates. Formatting and import checks initially encountered sandbox restrictions on uv's cache; they passed with approved cache access.
+
 | Gate | Command | Result |
 |---|---|---|
-| Typecheck | `uv run pyright` | pass (0 errors) |
-| Lint | `uv run ruff check . && uv run ruff format --check . && uv run lint-imports` | pass (117 files formatted, 1 contract kept) |
-| Full suite | `uv run pytest` | pass (135 tests) |
+| Typecheck | `uv run pyright` | pass, 0 errors and 0 warnings |
+| Lint | `uv run ruff check .` | pass |
+| Formatting | `uv run ruff format --check .` | pass, 119 files already formatted |
+| Layering | `uv run lint-imports` | pass, 1 contract kept, 0 broken |
+| Full suite | `uv run pytest` | pass, 147 tests in 3.23s, including wheel packaging |
+
+Standards and Spec also independently ran the three affected test files: 57 passed. The Spec review's scratch pointer mutation produced 2 failures and 15 deselections, both failures at the expected relationship assertion.
 
 ## Observability delivered
-- Logs: none, as the ticket says ("Observability: None"). evidence/05.md now gives the reason: ORM `Table.info` metadata and test-support code, with no runtime failure path.
-- Metrics: none, for the same reason.
+
+- **Logs:** none new, as specified by ticket 06. `ImmutableRevisionError` propagates as a programming error. The existing CLI handler logs `cli.unexpected_error` with command and traceback; its existing tests cover that behavior.
+- **Metrics:** none, explicitly outside scope.
+- **Known limit:** in-place plain JSON changes are not tracked and do not persist through that mutation alone. Whole-value reassignment is tracked and rejected. The required limitation is recorded in `evidence/06.md`.
 
 ## Not verified
+
 Code complete is not deployment verified. This review did **not** verify:
-- Deployment, runtime behavior in the target environment, or real traffic and data.
-- Ticket 06 (Revision update guard and rejection tests), which is still open.
-- `alembic check` against a deployed (non-test) database.
-- `uv build`. This ticket does not touch packaging.
-- That the red-first output quoted in the evidence was produced at the time. It is consistent with the code and with this review's mutation runs.
+
+- Deployment, production data or traffic, a container image or container logs.
+- Postgres; dedicated validation belongs to design-consistency-pass-21.
+- Actual historical execution of the recorded red steps.
+- Database-level enforcement or bulk/raw SQL updates: the agreed mechanism is an ORM `before_flush` tripwire. Deletes are outside its scope.
+- Tickets 01–05 or the complete feature beyond this ticket's diff.
+- A live CLI invocation specifically triggering `ImmutableRevisionError`; the guard and the existing generic CLI error handler are tested separately.
 
 ## Deployment verification checklist
-Evaluate manually or in the observability system to confirm the deployed change matches the intent of the spec or ticket.
 
-- [ ] Deploy: no migration runs for this ticket. `alembic current` on the deployed database shows the same head as before.
-- [ ] `uv run alembic check` against the deployed database: "No new upgrade operations detected".
-- [ ] `docker logs <container>` at startup: no new warnings or errors from model import or metadata.
+Use a disposable migrated database in the target environment for mutation checks.
+
+- [ ] **ORM guard:** load a committed Plugin Revision, Channel Revision and Plugin Binding in turn; change a scalar attribute (reassign the whole config value for a Binding) and flush. Each raises `ImmutableRevisionError` naming the table and attribute. Roll back and read through a separate connection; the stored row is unchanged.
+- [ ] **Permitted operations:** normal create/bind succeeds. Move a Channel's and a Plugin's current-Revision pointer to an existing Revision; a separate connection observes the new pointer.
+- [ ] **CLI rejection:** bind a valid owned Plugin Revision with config missing a required field. Expect exit 1, empty stdout, field errors and `Logged to <path>.` on stderr, and `channel_revision.rejected` in that JSON log file. Separate database queries show unchanged Revision/Binding counts and the original pointer.

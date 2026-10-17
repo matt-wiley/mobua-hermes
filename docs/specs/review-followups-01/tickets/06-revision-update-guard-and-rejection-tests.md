@@ -28,6 +28,7 @@ AC-4, AC-5, AC-20
   - the Channel's and the Plugin's current-Revision pointers can be moved to an existing Revision;
   - deleting a Revision row is not blocked (a non-goal check, so the guard stays narrow).
 - **AC-20:** the existing missing-field and one-invalid-binding service tests, and the CLI invalid-bind test, assert their checks before any rollback. The CLI test reads through a separate engine.
+  - Check the current-Revision relationship before autoflush and recheck its foreign key after the count query. A scratch mutation clearing the relationship before rejection must fail both service tests (review follow-up; evidence in `../evidence/06.md`).
 
 ## Out of scope
 - Guarding deletes.

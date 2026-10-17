@@ -48,8 +48,13 @@ def assert_nothing_saved_before_rollback(
 ) -> None:
     """AC-20: a rejected save leaves nothing pending, flushed or committed."""
     assert list(session.new) == []
-    assert channel.current_revision_id == current_revision_id
+    # Relationship assignment can leave the foreign key unchanged until autoflush.
+    with session.no_autoflush:
+        assert channel.current_revision_id == current_revision_id
+        assert channel.current_revision is not None
+        assert channel.current_revision.id == current_revision_id
     assert revision_count(session, channel) == 1
+    assert channel.current_revision_id == current_revision_id
     assert committed_revision_count(engine, channel) == 1
 
 
