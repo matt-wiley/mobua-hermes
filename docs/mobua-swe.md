@@ -26,7 +26,7 @@ modules:
       lint: "uv run ruff check . && uv run ruff format --check . && uv run lint-imports"
       test_single: "uv run pytest {file}"
       test_all: "uv run pytest"
-    commands_verified: false   # nothing to run yet: no pyproject.toml
+    commands_verified: true    # all five ran green on 2026-10-17 (53 tests)
   - name: web
     glob: "web/**"
     language: typescript
@@ -44,12 +44,13 @@ modules:
 
 # mobua-swe repo config
 
-Written by `/mobua-swe:setup` on 2026-10-16. Every other skill reads this file and stops if it is missing or stale.
+Written by `/mobua-swe:setup` on 2026-10-16 and updated on 2026-10-17. Every other skill reads this file and stops if it is missing or stale.
 Skills pick the module from the files a ticket touches.
 
-## Status: commands not yet verified
+## Status
 
-The repo is in its design phase and has no `pyproject.toml` or `web/package.json`, so none of the commands above could be run. They are the planned toolchain, not checked results. Re-run `/mobua-swe:setup` right after each module is scaffolded to run the commands and set `commands_verified: true`.
+- **core: verified on 2026-10-17.** `src/news` was scaffolded by design-consistency-pass-01. On that date, all five commands ran and passed: build, typecheck (pyright strict), lint (ruff check, ruff format, lint-imports), a single test file, and the full suite (53 tests). Resolved versions: Python 3.14.6, FastAPI 0.143.3, SQLAlchemy 2.1.5, Alembic 1.20.0, Typer 0.27.3, Pydantic 2.14.1.
+- **web: not yet verified.** There is no `web/package.json` yet, so the commands above are the planned toolchain, not checked results. Re-run `/mobua-swe:setup` right after the web module is scaffolded.
 
 ## Version notes
 
