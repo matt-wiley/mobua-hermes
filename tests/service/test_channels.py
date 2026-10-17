@@ -1,7 +1,7 @@
 import uuid
 
 import pytest
-from sqlalchemy import func, select
+from sqlalchemy import Engine, func, select
 from sqlalchemy.orm import Session
 from structlog.testing import capture_logs
 
@@ -30,6 +30,27 @@ def revision_count(session: Session, channel: Channel) -> int:
         .where(ChannelRevision.channel_id == channel.id)
     )
     return count or 0
+
+
+def committed_revision_count(engine: Engine, channel: Channel) -> int:
+    """The Channel's Revision count as a separate connection sees it."""
+    with engine.connect() as connection:
+        count = connection.scalar(
+            select(func.count())
+            .select_from(ChannelRevision)
+            .where(ChannelRevision.channel_id == channel.id)
+        )
+    return count or 0
+
+
+def assert_nothing_saved_before_rollback(
+    engine: Engine, session: Session, channel: Channel, current_revision_id: uuid.UUID | None
+) -> None:
+    """AC-20: a rejected save leaves nothing pending, flushed or committed."""
+    assert list(session.new) == []
+    assert channel.current_revision_id == current_revision_id
+    assert revision_count(session, channel) == 1
+    assert committed_revision_count(engine, channel) == 1
 
 
 def test_new_channel_starts_at_revision_one_with_no_bindings(session: Session) -> None:
@@ -65,13 +86,14 @@ def test_binding_with_valid_config_creates_a_pinned_revision(session: Session) -
 
 
 def test_binding_missing_a_required_field_is_rejected_and_no_revision_is_created(
-    session: Session,
+    engine: Engine, session: Session
 ) -> None:
-    """AC-1 failure mode."""
+    """AC-1 failure mode; AC-20."""
     reader = a_reader(session)
     plugin_revision = a_plugin_revision(session, reader)
     channel = create_channel(session, reader.id, "Local news")
     session.commit()
+    first_revision_id = channel.current_revision_id
 
     with pytest.raises(ChannelRevisionRejected) as raised:
         bind_plugin(session, reader.id, channel.id, plugin_revision.id, {})
@@ -79,10 +101,7 @@ def test_binding_missing_a_required_field_is_rejected_and_no_revision_is_created
     assert raised.value.errors == [
         FieldError(field="bindings.0.url", message="'url' is a required property")
     ]
-    session.rollback()
-    assert revision_count(session, channel) == 1
-    assert channel.current_revision is not None
-    assert channel.current_revision.number == 1
+    assert_nothing_saved_before_rollback(engine, session, channel, first_revision_id)
 
 
 def test_rejected_revision_is_logged_with_the_channel_and_errors(session: Session) -> None:
@@ -138,11 +157,13 @@ def test_binding_to_a_missing_plugin_revision_is_rejected(session: Session) -> N
     assert [error.field for error in raised.value.errors] == ["bindings.0.plugin_revision_id"]
 
 
-def test_one_invalid_binding_rejects_the_whole_revision(session: Session) -> None:
+def test_one_invalid_binding_rejects_the_whole_revision(engine: Engine, session: Session) -> None:
+    """AC-20."""
     reader = a_reader(session)
     plugin_revision = a_plugin_revision(session, reader)
     channel = create_channel(session, reader.id, "Local news")
     session.commit()
+    first_revision_id = channel.current_revision_id
 
     with pytest.raises(ChannelRevisionRejected) as raised:
         save_channel_revision(
@@ -156,8 +177,7 @@ def test_one_invalid_binding_rejects_the_whole_revision(session: Session) -> Non
         )
 
     assert [error.field for error in raised.value.errors] == ["bindings.1.url"]
-    session.rollback()
-    assert revision_count(session, channel) == 1
+    assert_nothing_saved_before_rollback(engine, session, channel, first_revision_id)
 
 
 def test_binding_again_keeps_the_existing_bindings(session: Session) -> None:

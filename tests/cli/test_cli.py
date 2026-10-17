@@ -15,7 +15,15 @@ from typer.testing import CliRunner, Result
 
 from news.cli.main import app
 from news.service.db import create_engine_for
-from news.service.models import Base, Channel, ChannelRevision, Plugin, PluginRevision, Reader
+from news.service.models import (
+    Base,
+    Channel,
+    ChannelRevision,
+    Plugin,
+    PluginBinding,
+    PluginRevision,
+    Reader,
+)
 from tests.service.factories import URL_PLUGIN_MANIFEST
 
 runner = CliRunner()
@@ -161,9 +169,13 @@ def test_binding_with_invalid_config_reports_field_errors_and_saves_nothing(
         f"Logged to {log_file}.",
     ]
     assert result.stdout == ""
+    # A separate engine sees only what the command committed (AC-20).
     with open_session(database_url) as session:
-        count = session.scalar(select(func.count()).select_from(ChannelRevision))
-    assert count == 1
+        assert session.scalar(select(func.count()).select_from(ChannelRevision)) == 1
+        assert session.scalar(select(func.count()).select_from(PluginBinding)) == 0
+        stored_channel = session.get_one(Channel, uuid.UUID(channel))
+        assert stored_channel.current_revision is not None
+        assert stored_channel.current_revision.number == 1
 
 
 def test_config_that_is_not_json_is_a_usage_error(
