@@ -5,7 +5,7 @@ from dataclasses import asdict, dataclass
 from typing import Any
 
 import structlog
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from news.service.binding_config import ConfigError, validate_binding_config
@@ -56,7 +56,7 @@ def save_channel_revision(
     errors = [
         error
         for position, binding in enumerate(bindings)
-        for error in _binding_errors(session, position, binding)
+        for error in _binding_errors(session, reader_id, position, binding)
     ]
     if errors:
         log.info(
@@ -118,9 +118,18 @@ def _get_channel(session: Session, reader_id: uuid.UUID, channel_id: uuid.UUID) 
     return channel
 
 
-def _binding_errors(session: Session, position: int, binding: BindingSpec) -> list[ConfigError]:
+def _binding_errors(
+    session: Session, reader_id: uuid.UUID, position: int, binding: BindingSpec
+) -> list[ConfigError]:
     prefix = f"bindings.{position}"
-    plugin_revision = session.get(PluginRevision, binding.plugin_revision_id)
+    # Bindable: the Reader's own Plugin Revisions, or Built-in ones, which have no Reader
+    # (ADRs 0018, 0019). Another Reader's Revision is reported as missing, revealing nothing.
+    plugin_revision = session.scalar(
+        select(PluginRevision).where(
+            PluginRevision.id == binding.plugin_revision_id,
+            or_(PluginRevision.reader_id == reader_id, PluginRevision.reader_id.is_(None)),
+        )
+    )
     if plugin_revision is None:
         return [ConfigError(f"{prefix}.plugin_revision_id", "no such Plugin Revision")]
     schema = parse_manifest(plugin_revision.manifest).config_schema

@@ -1,10 +1,13 @@
 """Small builders for service-layer tests."""
 
+import uuid
+
 from sqlalchemy.orm import Session
 
-from news.service.models import PluginRevision, Reader
+from news.service.models import Plugin, PluginRevision, Reader
 from news.service.plugins import create_plugin
 from news.service.readers import create_reader
+from news.service.revisions import creator_of
 
 URL_PLUGIN_MANIFEST = """
 name = "rss"
@@ -38,3 +41,21 @@ def a_plugin_revision(
     session: Session, reader: Reader, manifest: str = URL_PLUGIN_MANIFEST
 ) -> PluginRevision:
     return create_plugin(session, reader.id, manifest, {"main.py": "print('hi')"})
+
+
+def a_built_in_plugin_revision(session: Session) -> PluginRevision:
+    """A system-owned Plugin Revision with no Reader id; seeding itself is ticket 05."""
+    plugin = Plugin(id=uuid.uuid7(), reader_id=None, name="rss")
+    revision = PluginRevision(
+        id=uuid.uuid7(),
+        plugin_id=plugin.id,
+        reader_id=None,
+        number=1,
+        manifest=URL_PLUGIN_MANIFEST,
+        code={"main.py": ""},
+        created_by=creator_of(None),
+    )
+    session.add_all([plugin, revision])
+    plugin.current_revision = revision
+    session.flush()
+    return revision

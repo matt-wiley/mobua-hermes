@@ -15,7 +15,12 @@ from news.service.channels import (
     save_channel_revision,
 )
 from news.service.models import Channel, ChannelRevision
-from tests.service.factories import OPEN_PLUGIN_MANIFEST, a_plugin_revision, a_reader
+from tests.service.factories import (
+    OPEN_PLUGIN_MANIFEST,
+    a_built_in_plugin_revision,
+    a_plugin_revision,
+    a_reader,
+)
 
 
 def revision_count(session: Session, channel: Channel) -> int:
@@ -199,3 +204,41 @@ def test_another_readers_channel_cannot_be_revised(session: Session) -> None:
 
     with pytest.raises(ChannelNotFound):
         save_channel_revision(session, other.id, channel.id, [])
+
+
+def test_binding_another_readers_plugin_revision_is_rejected_as_unknown(session: Session) -> None:
+    owner = a_reader(session, "Ada")
+    other = a_reader(session, "Grace")
+    owners_revision = a_plugin_revision(session, owner)
+    channel = create_channel(session, other.id, "Local news")
+
+    with capture_logs() as logs, pytest.raises(ChannelRevisionRejected) as raised:
+        bind_plugin(session, other.id, channel.id, owners_revision.id, {"url": "https://x"})
+
+    assert raised.value.errors == [
+        ConfigError(field="bindings.0.plugin_revision_id", message="no such Plugin Revision")
+    ]
+    assert revision_count(session, channel) == 1
+    assert logs[0]["event"] == "channel_revision.rejected"
+
+
+def test_another_readers_plugin_revision_does_not_reveal_its_schema(session: Session) -> None:
+    owner = a_reader(session, "Ada")
+    other = a_reader(session, "Grace")
+    owners_revision = a_plugin_revision(session, owner)
+    channel = create_channel(session, other.id, "Local news")
+
+    with pytest.raises(ChannelRevisionRejected) as raised:
+        bind_plugin(session, other.id, channel.id, owners_revision.id, {})
+
+    assert [error.field for error in raised.value.errors] == ["bindings.0.plugin_revision_id"]
+
+
+def test_built_in_plugin_revision_can_be_bound_by_any_reader(session: Session) -> None:
+    reader = a_reader(session)
+    built_in = a_built_in_plugin_revision(session)
+    channel = create_channel(session, reader.id, "Local news")
+
+    revision = bind_plugin(session, reader.id, channel.id, built_in.id, {"url": "https://x"})
+
+    assert revision.bindings[0].plugin_revision_id == built_in.id
