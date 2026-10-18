@@ -304,6 +304,25 @@ def test_a_duplicate_in_another_block_is_still_reported() -> None:
 
 
 @pytest.mark.parametrize(
+    ("before", "after"),
+    [
+        ("> ", "\n"),
+        ("- ", "\n"),
+        ("1. ", "\n"),
+        ("```markdown\n", "\n```\n"),
+        ("~~~~\n", "\n~~~~\n"),
+        ("<div>\n", "\n</div>\n"),
+        ("<!--\n", "\n-->\n"),
+        ("    ", "\n"),
+    ],
+)
+def test_rows_inside_other_markdown_blocks_are_not_index_entries(before: str, after: str) -> None:
+    example = a_row(FIRST[0], "Use SQLite", amended_by="0002")
+
+    assert check(CONSISTENT_FILES, CONSISTENT_INDEX + before + example + after) == []
+
+
+@pytest.mark.parametrize(
     "row",
     [
         "| [0002](0002-allow-postgres.md) | Allow Postgres | Accepted |",

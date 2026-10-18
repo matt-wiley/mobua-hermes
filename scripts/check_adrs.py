@@ -12,6 +12,8 @@ from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
 
+from markdown_it import MarkdownIt
+
 INDEX = "README.md"
 FILENAME = re.compile(r"(\d{4})-[a-z0-9]+(?:-[a-z0-9]+)*\.md")
 METADATA = re.compile(r"(Status|Date|Amends|Amended by):(.*)")
@@ -169,20 +171,25 @@ def _index_problems(index: str, adrs: Mapping[str, Adr]) -> list[str]:
 def _table_rows(index: str) -> Iterator[str]:
     """Table lines, without the header and separator rows."""
     table: list[str] = []
-    in_table = False
-    for line in index.splitlines():
-        row = line.strip()
-        if not row:
-            in_table = False
+    lines = index.replace("\r\n", "\n").replace("\r", "\n").split("\n")
+    for token in MarkdownIt("commonmark").enable("table").parse(index):
+        if token.level != 0 or token.type not in {"table_open", "paragraph_open"}:
             continue
-        if "|" in row and (
-            in_table
-            or row.startswith("|")
-            or INDEX_LINK.match(row)
-            or row.split("|", 1)[0].strip() == "#"
-        ):
-            table.append(row)
-            in_table = True
+        if token.map is None:
+            continue
+        # Headerless or malformed tables become paragraphs; retain their diagnostics.
+        # Source rows preserve cells that Markdown rendering would pad or discard.
+        in_table = False
+        for line in lines[token.map[0] : token.map[1]]:
+            row = line.strip()
+            if "|" in row and (
+                in_table
+                or row.startswith("|")
+                or INDEX_LINK.match(row)
+                or row.split("|", 1)[0].strip() == "#"
+            ):
+                table.append(row)
+                in_table = True
     if table and [cell.strip() for cell in table[0].strip("|").split("|")] == [
         "#",
         "Decision",

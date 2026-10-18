@@ -28,6 +28,7 @@ build-backend = "uv_build"
 dev = [
     "httpx2>=2.13.1",
     "import-linter>=2.15",
+    "markdown-it-py>=4.2,<5",
     "psycopg[binary]>=3.3.6",
     "pyright>=1.1.414",
     "pytest>=9.1.1",
