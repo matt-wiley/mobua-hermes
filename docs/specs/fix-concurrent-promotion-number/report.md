@@ -55,6 +55,10 @@ FAILED tests/service/test_promotion.py::test_a_sibling_promotion_racing_for_the_
 1 failed, 17 deselected
 ```
 
+This red came from the old interleave point, before `INSERT INTO plugin_revision`. Against the
+old code, the committed test (which interleaves before `UPDATE plugin SET`) instead fails with
+`database is locked` on the competitor's INSERT. Both reds show the same defect.
+
 **Red, API test, with `drafts.py` reverted:**
 
 ```

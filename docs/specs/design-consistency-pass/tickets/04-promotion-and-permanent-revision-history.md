@@ -40,4 +40,4 @@ AC-49, AC-65, AC-66, AC-67, AC-68, AC-69, AC-81
 
 ## Out of scope
 - No process execution, test-result gate, automatic merging, Channel Drafts, Revision archival/deletion, or automatic Binding upgrades.
-- Do not rewrite the completed 01/02 tickets or their evidence; this is additive behavior and a new migration.
+- Do not rewrite the completed 01/02 tickets or their evidence; this is additive behavior. No new migration is needed: ticket 03's schema plus the ORM guard (AC-68 "service/ORM") suffice.
