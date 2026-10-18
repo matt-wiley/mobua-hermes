@@ -92,17 +92,20 @@ def select_current_revision(
         raise ValidationRejected([FieldError("revision_id", "no such Plugin Revision")])
     current = plugin.current_revision_id
     problem = selection_problem(current, expected_current_revision_id, needs_confirmation=True)
-    if problem is None and move_current_pointer(session, plugin.id, current, target):
-        session.flush()
-        return plugin
-    selection_conflict(
-        reader_id,
-        plugin_id,
-        "select_current",
-        problem or "stale_current_selection",
-        expected_current_revision_id,
-        current_revision_id(session, plugin_id),
-    )
+    if problem is None:
+        moved = move_current_pointer(session, plugin.id, current, target)
+        problem = None if moved else "stale_current_selection"
+    if problem is not None:
+        selection_conflict(
+            reader_id,
+            plugin_id,
+            "select_current",
+            problem,
+            expected_current_revision_id,
+            current_revision_id(session, plugin_id),
+        )
+    session.flush()
+    return plugin
 
 
 def move_current_pointer(

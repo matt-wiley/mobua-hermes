@@ -341,14 +341,14 @@ def draft_promote(
 ) -> None:
     """Promote the saved Draft (not unsaved local files) to the current Revision; print it."""
     with _transaction(ctx) as session:
-        match directory, expected_version:
-            case None, int() as version:
-                pass
-            case Path() as workspace, None:
-                get_draft(session, reader, plugin, draft)
-                version = read_marker_version(workspace, reader, plugin, draft)
-            case _:
-                raise typer.BadParameter("give exactly one of --directory or --expected-version")
+        if directory is None and expected_version is not None:
+            version = expected_version
+        elif directory is not None and expected_version is None:
+            # An unknown Draft is reported as such, not as a workspace that doesn't match it.
+            get_draft(session, reader, plugin, draft)
+            version = read_marker_version(directory, reader, plugin, draft)
+        else:
+            raise typer.BadParameter("give exactly one of --directory or --expected-version")
         result = RevisionDetails.model_validate(
             promote_draft(session, reader, plugin, draft, version, confirm_current)
         )
