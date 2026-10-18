@@ -48,7 +48,7 @@ work into an artificial serial chain.
 | [01](01-scaffold-and-revisioned-data-model.md) | Scaffold the core module and the revisioned Channel/Plugin data model | done | — | AC-1, AC-5, AC-53 |
 | [02](02-encrypted-credentials.md) | Envelope-encrypted Secrets and LLM Provider credentials | done | 01 | AC-23 |
 | [03](03-draft-workspaces-and-compatible-migration.md) | Reader Plugin starter, Draft workspaces, and compatible migration | done | 01 | AC-60, AC-61, AC-62, AC-63, AC-64 |
-| [04](04-promotion-and-permanent-revision-history.md) | Promote Drafts and select permanent Revision history | todo | 03 | AC-49, AC-65, AC-66, AC-67, AC-68, AC-69, AC-81 |
+| [04](04-promotion-and-permanent-revision-history.md) | Promote Drafts and select permanent Revision history | done | 03 | AC-49, AC-65, AC-66, AC-67, AC-68, AC-69, AC-81 |
 | [05](05-plugin-process-runner-and-manual-collection.md) | Hardened Plugin process runner and manual Collection | todo | 02, 04 | AC-11, AC-12, AC-14, AC-15, AC-16, AC-23 |
 | [06](06-plugin-resource-limits-and-pinned-runtime.md) | Plugin resource limits and pinned Python runtime | todo | 05 | AC-13, AC-50 |
 | [07](07-built-in-global-identities-and-initial-installation.md) | Globally identified Built-ins, shared scope, and initial RSS installation | todo | 04, 06 | AC-4, AC-7, AC-10, AC-54 |

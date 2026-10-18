@@ -1,7 +1,7 @@
 ---
 id: design-consistency-pass-04
 title: "Promote Drafts and select permanent Revision history"
-status: todo
+status: done
 blocked_by: [design-consistency-pass-03]
 external: null
 ---
