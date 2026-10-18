@@ -36,6 +36,10 @@ runs right before 13. Both moves respect `blocked_by`.
 Group 1 was built on a single branch before this rule existed. It was split into four
 stacked PRs: 01 with review-followups-01; 02; the docs-only plan revision; and 03.
 
+Group 2 ships as two stacked PRs: 04 (`feat/draft-promotion-and-ci`), then 21
+(`feat/docs-postgres-ci`, branched from 04's branch). Ticket 21 is large enough to review on
+its own.
+
 ## Recommended execution order and criterion coverage
 
 Run 04 next, then follow the PR group order above. Each implementation starts in a
