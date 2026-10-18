@@ -33,8 +33,8 @@ runs right before 13. Both moves respect `blocked_by`.
 | 8 | Publishing | 17, 18 | Articles with Model Attribution, citation retries, budget failures |
 | 9 | Automated operation | 19, 20 | Scheduler, purge, periodic Model Health, end-to-end smoke tests |
 
-Group 1 was built on a single branch before this rule existed. It was split into three
-stacked PRs: 01 with review-followups-01; 02; and the plan revision with 03.
+Group 1 was built on a single branch before this rule existed. It was split into four
+stacked PRs: 01 with review-followups-01; 02; the docs-only plan revision; and 03.
 
 ## Recommended execution order and criterion coverage
 
