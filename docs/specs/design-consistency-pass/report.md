@@ -90,6 +90,15 @@ reproduced missing test case.
 - CI job names identify the failing gate: typecheck, lint, SQLite tests, Postgres tests, or docs.
 - No new application events or metrics, as specified by ticket 21. Runtime metrics are not appropriate for this local documentation consistency check.
 
+## Follow-up status (2026-10-18)
+
+The optional-leading-pipe major above was subsequently repaired in `e925648`, after
+failing regressions were committed in `92e9795`. The focused ADR suite passes 55 tests,
+the full SQLite suite passes 481 tests, and all required local gates pass. See the
+[fix report](../fix-adr-index-leading-pipe/report.md) for scope, red/green evidence,
+and a separate adjacent normalization finding. The verdict above remains the independent
+review result for `9de31c8`; independent review of this repair is pending.
+
 ## Not verified
 
 Code complete is not deployment verified. This review did **not** verify:
@@ -98,7 +107,7 @@ Code complete is not deployment verified. This review did **not** verify:
 - The docs check on a deployed commit or runtime behavior with target-environment data and traffic.
 - A full Postgres API/CLI suite in this review. The required repository/schema subset passed; implementation evidence separately records an earlier full Postgres run.
 - Branch protection, web CI, hosted container integration tests, or image publishing; these are outside ticket 21.
-- A fix for the new optional-pipe finding. This review changes only the report; it does not squash commits or change implementation.
+- The subsequent optional-pipe repair. It was implemented after this review and awaits independent review, as recorded above.
 
 ## Deployment verification checklist
 
