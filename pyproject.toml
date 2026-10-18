@@ -10,6 +10,7 @@ dependencies = [
     "cryptography>=50.0.2",
     "fastapi>=0.143.3",
     "jsonschema>=4.26.0",
+    "packaging>=26.3",
     "pydantic>=2.14.1",
     "sqlalchemy>=2.1.5",
     "structlog>=26.1.0",
