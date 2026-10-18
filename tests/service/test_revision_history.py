@@ -85,6 +85,7 @@ def test_history_lists_the_whole_tree_in_number_order_with_the_current_selection
     assert history.revisions[0].manifest == lifecycle.starter.manifest
     assert history.revisions[0].code == lifecycle.starter.code
     assert history.revisions[0].created_by == str(lifecycle.reader_id)
+    assert all(revision.created_at.tzinfo is not None for revision in history.revisions)
 
 
 def test_selecting_an_older_revision_creates_nothing_and_moves_no_bindings(

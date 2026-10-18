@@ -1,9 +1,18 @@
 """Shared saved-data projections for the CLI and API."""
 
 import uuid
-from datetime import datetime
+from datetime import UTC, datetime
+from typing import Annotated
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import AfterValidator, BaseModel, ConfigDict
+
+
+def _as_utc(value: datetime) -> datetime:
+    # Times are stored in UTC, but SQLite returns them without a zone; Postgres keeps it.
+    return value if value.tzinfo else value.replace(tzinfo=UTC)
+
+
+type UTCDateTime = Annotated[datetime, AfterValidator(_as_utc)]
 
 
 class PluginStarter(BaseModel):
@@ -32,7 +41,7 @@ class RevisionDetails(BaseModel):
     # Empty for a tree root: a starter, or legacy history whose ancestry was never recorded.
     parent_revision_id: uuid.UUID | None
     created_by: str
-    created_at: datetime
+    created_at: UTCDateTime
     manifest: str
     code: dict[str, str]
 
