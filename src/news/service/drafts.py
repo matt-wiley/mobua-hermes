@@ -17,7 +17,6 @@ from news.service.models import Plugin, PluginDraft, PluginRevision
 from news.service.revision_history import (
     SelectionProblem,
     current_revision_id,
-    move_current_pointer,
     selection_conflict,
     selection_problem,
 )
@@ -276,6 +275,21 @@ def promote_draft(
     )
     if problem is not None:
         _selection_conflict(draft, problem, expected_current_revision_id, current)
+    # Claim the Plugin row before numbering. A competing promotion has either moved the pointer
+    # already or waits on this write lock, so it never computes the same number.
+    claimed = session.scalar(
+        update(Plugin)
+        .where(Plugin.id == plugin_id, Plugin.current_revision_id.is_not_distinct_from(current))
+        .values(current_revision_id=Plugin.current_revision_id)
+        .returning(Plugin.id)
+    )
+    if claimed is None:
+        _selection_conflict(
+            draft,
+            "stale_current_selection",
+            expected_current_revision_id,
+            current_revision_id(session, plugin_id),
+        )
 
     # Numbered from the whole history: the current Revision may be an older one.
     latest = session.scalar(
@@ -293,14 +307,10 @@ def promote_draft(
     )
     session.add(revision)
     session.flush()
-    # Conditional writes catch a competing writer that changed either row after the reads above.
-    if not move_current_pointer(session, plugin_id, current, revision.id):
-        _selection_conflict(
-            draft,
-            "stale_current_selection",
-            expected_current_revision_id,
-            current_revision_id(session, plugin_id),
-        )
+    session.execute(
+        update(Plugin).where(Plugin.id == plugin_id).values(current_revision_id=revision.id)
+    )
+    # A conditional delete catches a competing save that changed the Draft after it was read.
     deleted = session.scalar(
         delete(PluginDraft)
         .where(PluginDraft.id == draft_id, PluginDraft.version == expected_version)

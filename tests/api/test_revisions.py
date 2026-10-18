@@ -2,23 +2,23 @@
 
 import json
 import uuid
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 import pytest
 from fastapi.routing import APIRoute
 from fastapi.testclient import TestClient
-from sqlalchemy import Engine
+from sqlalchemy import Connection, Engine
 from sqlalchemy.orm import Session
 
 from news.api.app import app
 from news.service.channels import bind_plugin, create_channel
-from news.service.drafts import create_draft
+from news.service.drafts import create_draft, promote_draft
 from news.service.plugins import create_plugin
 from tests.api.test_drafts import base
 from tests.api.test_drafts import client as client
 from tests.db_failures import fail_commits_on
 from tests.service.factories import a_reader
-from tests.service.test_promotion import committed_state
+from tests.service.test_promotion import committed_state, concurrent_write_before
 
 SENSITIVE = "SENSITIVE_sk-live-sentinel"
 PINNED = "# /// script\n# dependencies = ['feedparser==6.0.11']\n# ///\n"
@@ -152,6 +152,32 @@ def test_api_older_parent_promotion_requires_and_accepts_confirmation(
     assert confirmed.json()["number"] == 3
     assert confirmed.json()["parent_revision_id"] == str(ids.starter)
     assert client.get(ids.revisions).json()["current_revision_id"] == confirmed.json()["id"]
+
+
+def test_api_promotion_losing_a_race_for_the_number_is_an_actionable_conflict(
+    client: TestClient, engine: Engine, ids: Ids, session: Session
+) -> None:
+    sibling = create_draft(session, ids.reader, ids.plugin, ids.starter)
+    session.commit()
+    competing: list[uuid.UUID] = []
+
+    def promote_sibling(connection: Connection) -> None:
+        with Session(bind=connection) as other:
+            revision = promote_draft(other, ids.reader, ids.plugin, sibling.id, 1)
+            competing.append(revision.id)
+            other.flush()
+
+    served = cast(Engine, app.state.engine)
+    with concurrent_write_before(served, "UPDATE plugin SET", promote_sibling):
+        response = promote(client, ids, ids.draft, 1)
+
+    assert response.status_code == 409, response.text
+    assert response.json()["reason"] == "stale_current_selection"
+    assert response.json()["actual_current_revision_id"] == str(competing[0])
+    history = client.get(ids.revisions).json()
+    assert history["current_revision_id"] == str(competing[0])
+    assert sorted(revision["number"] for revision in history["revisions"]) == [1, 2]
+    assert ids.draft in [row[0] for row in committed_state(engine)["drafts"]]
 
 
 def test_api_selects_any_revision_without_creating_one_or_moving_bindings(

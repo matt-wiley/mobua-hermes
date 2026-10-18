@@ -400,13 +400,25 @@ def test_a_pointer_change_racing_the_promotion_is_a_conflict_after_rollback(
         )
 
     with (
-        concurrent_write_before(engine, "INSERT INTO plugin_revision", select_newer),
+        capture_logs() as logs,
+        concurrent_write_before(engine, "UPDATE plugin SET", select_newer),
         pytest.raises(CurrentSelectionConflict) as raised,
     ):
         lifecycle.promote(session, lifecycle.draft)
 
     assert raised.value.reason == "stale_current_selection"
     assert raised.value.actual == newer.id
+    assert logs[-1] == {
+        "event": "plugin_draft.conflict",
+        "log_level": "info",
+        "reader_id": str(lifecycle.reader_id),
+        "plugin_id": str(lifecycle.plugin_id),
+        "draft_id": str(lifecycle.draft.id),
+        "operation": "promote",
+        "expected_current_revision_id": None,
+        "actual_current_revision_id": str(newer.id),
+        "reason": "stale_current_selection",
+    }
     session.rollback()
     after = committed_state(engine)
     assert after["current"] == [(lifecycle.plugin_id, newer.id)]
@@ -424,7 +436,7 @@ def test_a_save_racing_the_promotion_is_a_conflict_after_rollback(
         )
 
     with (
-        concurrent_write_before(engine, "INSERT INTO plugin_revision", save_elsewhere),
+        concurrent_write_before(engine, "UPDATE plugin SET", save_elsewhere),
         pytest.raises(DraftConflict) as raised,
     ):
         lifecycle.promote(session, lifecycle.draft)
@@ -437,6 +449,45 @@ def test_a_save_racing_the_promotion_is_a_conflict_after_rollback(
         (lifecycle.draft.id, 2, "raced")
     ]
     assert len(after["revisions"]) == 1
+
+
+def test_a_sibling_promotion_racing_for_the_same_number_is_a_conflict_after_rollback(
+    engine: Engine, session: Session, lifecycle: Lifecycle
+) -> None:
+    sibling = lifecycle.new_draft(session, lifecycle.starter.id)
+    session.commit()
+    competing: list[PluginRevision] = []
+
+    def promote_sibling(connection: Connection) -> None:
+        with Session(bind=connection) as other:
+            competing.append(lifecycle.promote(other, other.merge(sibling)))
+            other.flush()
+
+    with (
+        capture_logs() as logs,
+        concurrent_write_before(engine, "UPDATE plugin SET", promote_sibling),
+        pytest.raises(CurrentSelectionConflict) as raised,
+    ):
+        lifecycle.promote(session, lifecycle.draft)
+
+    assert raised.value.reason == "stale_current_selection"
+    assert raised.value.actual == competing[0].id
+    assert logs[-1] == {
+        "event": "plugin_draft.conflict",
+        "log_level": "info",
+        "reader_id": str(lifecycle.reader_id),
+        "plugin_id": str(lifecycle.plugin_id),
+        "draft_id": str(lifecycle.draft.id),
+        "operation": "promote",
+        "expected_current_revision_id": None,
+        "actual_current_revision_id": str(competing[0].id),
+        "reason": "stale_current_selection",
+    }
+    session.rollback()
+    after = committed_state(engine)
+    assert after["current"] == [(lifecycle.plugin_id, competing[0].id)]
+    assert lifecycle.draft.id in [row[0] for row in after["drafts"]]
+    assert sorted(row[1] for row in after["revisions"]) == [1, 2]
 
 
 def test_promotion_does_not_require_a_successful_test_run(
