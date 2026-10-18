@@ -31,8 +31,10 @@ dev = [
     "psycopg[binary]>=3.3.6",
     "pyright>=1.1.414",
     "pytest>=9.1.1",
+    "pyyaml>=6.0.3",
     "ruff>=0.17.1",
     "types-jsonschema>=4.26.0.20261006",
+    "types-pyyaml>=6.0.12.20260906",
 ]
 
 [tool.ruff]
