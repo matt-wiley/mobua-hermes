@@ -3,6 +3,7 @@
 Status: Accepted
 Date: 2026-10-16
 Amends: ADRs 0008, 0012
+Amended by: ADR 0024
 
 ## Context
 
@@ -16,6 +17,10 @@ ADR 0008 said each Channel uses one Model, while also scoping Plugin tokens to "
 - **No per-Binding access control.** Every Plugin bound to a Channel may call any of that Channel's Channel Models.
 - **Unknown names are refused.** A call naming a Channel Model the Channel doesn't define gets a clear error and is logged to Channel Health.
 - **Judgment belongs to the Channel.** Plugins retrieve and organize; vetting and checks against past Articles are Channel steps within the existing processes, not new processes. Checking past Articles is a step of Publish. Whether vetting is a step of Collection or Publish is decided with the Plugin-to-Channel and Channel-to-Core contracts.
+
+Draft Test Run exception: amended by ADR 0024. Test errors, including unknown Channel Model
+names, are shown in ephemeral test results and never create Channel Health entries. Real
+Provider failures still update Model Health, and normal Gateway accounting remains in force.
 
 ## Alternatives rejected
 

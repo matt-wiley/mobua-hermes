@@ -2,7 +2,7 @@
 
 Status: Accepted
 Date: 2026-10-16
-Amended by: ADRs 0021, 0023
+Amended by: ADRs 0021, 0023, 0024
 
 ## Context
 
@@ -11,6 +11,10 @@ ADR 0008 puts all LLM access behind the Core's LLM Gateway. LiteLLM (proxy or li
 ## Decision
 
 Build our own thin Gateway. Its contract is one call: messages in, either text or JSON validated against a schema out, plus token usage for per-Channel cost. No streaming, tool use, or embeddings in v1. Two adapters to start: OpenAI-compatible (OpenAI, Ollama, OpenRouter, LM Studio, vLLM) and Anthropic. Provider calls are delegated to existing libraries underneath; scoped tokens, resolving Channel Model names (ADR 0021), and cost attribution are ours.
+
+Call metadata: amended by ADR 0024. Calls accept extensible tags for local usage analysis,
+with automatic Gateway-controlled Test Run markers and forwarding where Providers support it.
+Metadata is separate from prompt text.
 
 ## Alternatives rejected
 

@@ -1,32 +1,34 @@
 ---
 id: design-consistency-pass-20
-title: End-to-end smoke test: scheduler tick to attributed Article
+title: "Container smoke tests for scheduled publishing and Draft-to-Collection flow"
 status: todo
-blocked_by: [design-consistency-pass-05, design-consistency-pass-15, design-consistency-pass-16, design-consistency-pass-17]
+blocked_by: [design-consistency-pass-07, design-consistency-pass-08, design-consistency-pass-16, design-consistency-pass-18, design-consistency-pass-19]
 external: null
 ---
 
-# End-to-end smoke test: scheduler tick to attributed Article
+# Container smoke tests for scheduled publishing and Draft-to-Collection flow
 
 ## Goal
-Prove the pieces compose. One test drives a Channel from a scheduler tick through a real Plugin Run, Collection, the Gateway and Publish to an Article in the Inbox, with no fakes except the Provider Adapter and the clock.
+Prove the revised pieces compose in the container: scheduled RSS Collection/Publish and a saved Draft Test Run followed by promotion, explicit Binding, and normal Collection.
 
 ## Criteria covered
-AC-57
+AC-57, AC-82
 
 ## Seams
-- Edges, all real: the scheduler loop, the Plugin Run launcher (uid switch, clean env, rlimits, `uv run`), SQLite repositories, the LLM Gateway.
-- Fakes: a fake Provider Adapter returning canned grouping and writing output whose Citations match the fixture feed; the injected clock.
-- Fixture: a local RSS file (or a local HTTP server) the RSS Built-in Plugin reads, so no network is needed.
-- Runs in the container image, alongside the launcher integration tests from tickets 03 and 04, behind the same pytest marker.
+- Real edges: restricted process runner/limits/uv, temporary cleanup, SQLite migrations/persistence, Gateway tokens/budgets/accounting, scheduler and Collection/Publish.
+- Only fake boundaries are Provider transport and injected clock. Use local fixture feeds and pinned preseeded/local package sources; no actual remote Provider is required.
+- Separate normal scheduled smoke and Draft-to-Collection smoke scenarios so failures identify the flow.
 
 ## Observability
-- None new. The test asserts the absence of `plugin_run.failed`, `news_item.rejected` and `article.rejected` events, and one call record per LLM step.
+- No new event families. Assert expected safe Draft events, tagged usage, normal run attribution, and absence of credential leaks or test failure/Health artifacts.
 
 ## Verification
-- AC-57: after one tick, the Feed holds the fixture's News Items and they are marked used. The Inbox holds at least one Article whose Citations all match fixture Source References and whose Model Attribution names the fake Model for each LLM step. Call records exist for every LLM step and nothing else.
-- Also check that a second tick with no new feed items produces no new Article, so dedup holds across the whole flow.
+- AC-57: one scheduler tick produces fixture News Items then a cited/attributed Article with call records; a second tick without new input produces no duplicate Article.
+- AC-82: create/save/test with real runner, confirm ephemeral preview and usage tags with zero ingestion/Health/history, then promote/delete Draft, bind the new Revision explicitly, and collect its actual code.
+- Verify permanent ancestry and stable normal Plugin Run attribution survive Draft removal. Check no sentinel key appears in env beyond the one declared Secret, logs, usage metadata, or output artifacts.
+
+## Deployment verification
+- Own final container integration of all Draft, normal Collection, Gateway usage, and scheduled Article checks. Document Not verified separately for actual deployment.
 
 ## Out of scope
-- New behavior. If the test exposes a defect, fix it only if it's a one-line wiring fix; otherwise report it against the owning ticket.
-- Real LLM Providers, the network, Postgres (ticket 21), and the Web App.
+- Real remote LLMs, external feeds, update delivery, Postgres/CI (21), Web App. Defects belong to the relevant owner ticket; this ticket adds integration evidence, not new product scope.

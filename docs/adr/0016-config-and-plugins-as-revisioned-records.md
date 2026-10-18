@@ -3,7 +3,7 @@
 Status: Accepted
 Date: 2026-10-16
 Amends: ADR 0015
-Amended by: ADR 0018
+Amended by: ADRs 0018, 0024
 
 ## Context
 
@@ -16,6 +16,10 @@ Channels and Plugins live in the database. Each has an identity row plus immutab
 A Plugin Revision stores its Plugin Manifest and its code files as text. At run time the Channel writes them to a temporary directory and runs them there; the stdin/stdout contract from ADR 0015 is unchanged.
 
 Plugin config: amended by ADR 0018. A Plugin Revision holds the Manifest and code only; per-Channel config lives on Plugin Bindings in the Channel Revision, each pinned to one Plugin Revision.
+
+Plugin editing and history: amended by ADR 0024. Plugins have multiple disposable mutable
+Drafts based on immutable Revisions. Promotion creates a permanent Revision and deletes the
+Draft; every Plugin starts with a valid starter root Revision. Channel editing is unchanged.
 
 ## Alternatives rejected
 

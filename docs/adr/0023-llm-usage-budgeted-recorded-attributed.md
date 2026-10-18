@@ -3,6 +3,7 @@
 Status: Accepted
 Date: 2026-10-16
 Amends: ADR 0012
+Amended by: ADR 0024
 
 ## Context
 
@@ -18,6 +19,15 @@ Every Plugin on a Channel may call any of its Channel Models (ADR 0021), so noth
 A call proceeds only if all applicable budgets have room. Any budget may be set to unlimited explicitly. Budgets count tokens, not money. A refused call is recorded in Channel Health naming the exhausted budget and the call's Provider and Model; unfinished Topics stay unused (ADR 0010).
 
 **Call records.** The Gateway stores one record per call: time, Reader, Channel, caller (Publish step, Plugin Binding, or Core agent), Channel Model name, Provider, Model id, tokens in and out, latency, outcome (ok, error kind, or refusing budget), and whether it was a citation retry. Kept 90 days by default (a Reader setting).
+
+Test calls and metadata: amended by ADR 0024. Ephemeral Draft Test Runs still use ordinary
+budgets, call records, and metrics. Records include extensible call metadata, including an
+automatic Test Run marker and Plugin/Draft identifiers for test calls. No persistent Test Run
+history or Manifest/code snapshots are required. Metadata does not add arbitrary metric labels.
+
+Test Health exception: amended by ADR 0024. Test Run failures and budget refusals do not
+create Channel Health entries. Real Provider failures still update Model Health; budgets,
+call outcomes, and usage accounting remain in force.
 
 **Metrics.** Prometheus exposes `gateway_calls_total{provider,model,outcome}`, `gateway_tokens_total{provider,model,direction}`, `gateway_call_duration_seconds{provider,model}`, and `gateway_budget_refusals_total{budget,provider}`, with no Reader or Channel labels to keep cardinality bounded.
 
