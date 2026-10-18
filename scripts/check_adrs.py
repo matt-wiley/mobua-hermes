@@ -169,7 +169,14 @@ def _index_problems(index: str, adrs: Mapping[str, Adr]) -> list[str]:
 def _table_rows(index: str) -> Iterator[str]:
     """Table lines, without the header and separator rows."""
     table = [line.strip() for line in index.splitlines() if line.strip().startswith("|")]
-    yield from (line for line in table[1:] if SEPARATOR_ROW.fullmatch(line) is None)
+    if table and [cell.strip() for cell in table[0].strip("|").split("|")] == [
+        "#",
+        "Decision",
+        "Status",
+        "Amended by",
+    ]:
+        table = table[1:]
+    yield from (line for line in table if SEPARATOR_ROW.fullmatch(line) is None)
 
 
 def _parse_row(line: str, problems: list[str]) -> IndexRow | None:
