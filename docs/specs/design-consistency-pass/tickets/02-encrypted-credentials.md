@@ -1,7 +1,7 @@
 ---
 id: design-consistency-pass-02
 title: Envelope-encrypted Secrets and LLM Provider credentials
-status: todo
+status: done
 blocked_by: [design-consistency-pass-01]
 external: null
 ---

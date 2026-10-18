@@ -17,6 +17,7 @@ from sqlalchemy import (
     JSON,
     DateTime,
     ForeignKey,
+    LargeBinary,
     MetaData,
     Text,
     UniqueConstraint,
@@ -57,6 +58,36 @@ class Reader(Base):
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid7)
     name: Mapped[str]
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+
+
+class ReaderDataKey(Base):
+    __tablename__ = "reader_data_key"
+    __table_args__ = scoped("reader")
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid7)
+    reader_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("reader.id"), unique=True)
+    encrypted_key: Mapped[bytes] = mapped_column(LargeBinary)
+
+
+class Secret(Base):
+    __tablename__ = "secret"
+    __table_args__ = (UniqueConstraint("reader_id", "name"), scoped("reader"))
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid7)
+    reader_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("reader.id"), index=True)
+    name: Mapped[str]
+    encrypted_value: Mapped[bytes] = mapped_column(LargeBinary)
+
+
+class LLMProvider(Base):
+    __tablename__ = "llm_provider"
+    __table_args__ = (UniqueConstraint("reader_id", "name"), scoped("reader"))
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid7)
+    reader_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("reader.id"), index=True)
+    name: Mapped[str]
+    url: Mapped[str]
+    encrypted_credential: Mapped[bytes] = mapped_column(LargeBinary)
 
 
 class Plugin(Base):

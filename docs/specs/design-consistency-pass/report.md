@@ -1,126 +1,87 @@
-# Code-complete report: Design consistency pass (ticket 01)
+# Code-complete report: Design consistency pass (ticket 02)
 
-- **Covers:** `b1afb21..7e03878` on branch `feat/design-consistency-pass`
-- **Spec:** `docs/specs/design-consistency-pass/spec.md`
-- **Tickets:** design-consistency-pass-01 is `done`. Tickets 02–21 are `todo` and out of scope for this review.
-- **Sync:** n/a. Every ticket has `external: null`.
-- **Date:** 2026-10-17
+- **Covers:** `0d34a6ea83c44bdb80086cd15afa2e7b13132f82..6116d5ef8b568d0eff0ab159ff1a60a183026de9` on `feat/design-consistency-pass--codex-test`.
+- **Branch merge-base:** `b1afb214eb1e3b059373079ad2fa2a2c5f4f55d9` with `origin/main`. The requested review focuses on ticket 02's delta above; earlier branch work is context, not independently re-reviewed.
+- **Spec:** `docs/specs/design-consistency-pass/spec.md`.
+- **Tickets:** `design-consistency-pass-02`, status `done`. AC-23 storage/logging and ADR 0009 setup are in scope. Plugin environment isolation belongs to ticket 03; Gateway credential use belongs to ticket 09. This is not completion of the whole spec.
+- **Sync:** n/a; ticket has `external: null`.
+- **Date:** 2026-10-17.
 
 ## Verdict
-**NOT CODE COMPLETE**: the Standards and Code-complete evidence axes both fail on one major finding. Saving a Channel Revision loads the Plugin Revision without scoping it to the Reader, so one Reader can bind another Reader's private Plugin Revision. This is untested, and a scratch run on SQLite confirmed it.
+
+**CODE COMPLETE** for ticket 02: Standards, Spec, and Code-complete evidence reviews pass. One nonblocking standards minor remains in test code. All configured core gates pass, including 186 tests.
+
+Three parallel fresh-context reviewers independently inspected the fixed commit without editing files. The evidence reviewer ran all configured gates; the Spec reviewer also ran the 39 focused cases. The coordinating reviewer inspected the delta, code, tests, and ADR 0009 and consolidated results. This report replaces the earlier ticket-01 report, which remains in Git history.
 
 ## Findings
-Blockers first. No blockers were found.
+
+No blockers or majors.
 
 ### Standards
-- **[major]** `src/news/service/channels.py:121-126` (`_binding_errors`)
-  - Source: docs/standards.md, Repo overrides, core: "Scope every row by Reader, and by Channel where it belongs to one. Enforce this in the service layer". Also ADR 0018: "A Binding may only reference Revisions of Plugins owned by the Channel's Reader, or of Built-in Plugins".
-  - Problem: `session.get(PluginRevision, id)` doesn't check the owner. Validation errors also expose the other Reader's config schema.
-  - Fix: accept only a Plugin Revision whose `reader_id` is the acting Reader's id or `NULL` (a Built-in). Otherwise report `bindings.N.plugin_revision_id: no such Plugin Revision`. Write the test red-first.
-  - Note: the Spec axis files the same issue as minor, because AC-4 belongs to ticket 05. It still counts as major here: the repo's standards rule applies now, and the shipped CLI exposes it.
-- **[minor]** `src/news/cli/main.py:88,105,115,133`
-  - Source: baseline §5, "no silent fallbacks".
-  - Problem: success output is echoed inside the transaction, before the commit. If the commit fails, the user has already been told it succeeded.
-  - Fix: echo after the `with` block exits.
-- **[minor]** `src/news/cli/main.py:107,136-138`
-  - Source: baseline §5, "logged with context".
-  - Problem: `ManifestError` and `ChannelNotFound` are written to stderr but never logged.
-  - Fix: log them in the service layer with the Reader and Channel ids.
-- **[minor]** `src/news/cli/main.py:73`
-  - Source: baseline §1, "comments say why".
-  - Problem: there's a `pyright: ignore` with no reason given.
-  - Fix: use `cast` after the `isinstance` check, or add a one-line why.
-- **[minor]** `src/news/service/binding_config.py:47-56`
-  - Problem: the `cast`s are sound, but the invariant behind them isn't stated: `required` and `additionalProperties` errors only occur on object instances.
-  - Fix: add a one-line comment.
-- **[minor]** `src/news/service/manifest.py:12-15`, `channels.py:23-26`
-  - Source: baseline §1, "Names carry the meaning".
-  - Problem: Manifest errors reuse `ConfigError`, a type documented as a *Binding*-config error. The two exception `__init__` methods are also duplicates.
-  - Fix: rename it to a neutral `FieldError`.
-- **[minor]** `src/news/service/db.py:10-11`
-  - Source: baseline §4.
-  - Problem: `ALEMBIC_INI` resolves to the source tree, so `news db upgrade` fails when run from a built wheel.
-  - Fix: move migrations into the package, or record that migrations only run from a source checkout (e.g. in an ADR, or in the container ticket).
-- **Snapshot staleness:** not stale. The resolved versions are inside the snapshot majors.
+
+- **[minor] `tests/service/test_credentials.py:23`** — Source: `docs/standards.md`, SQLAlchemy standards: "Never build SQL with f-strings." The table-existence test uses `text(f"SELECT count(*) FROM {name}")`. Its fixed table-name list prevents injection, so this is nonblocking. Fix: use `select(func.count()).select_from(Base.metadata.tables[name])`.
+- **Verdict:** pass. No functional or security defect found. Encryption is pure; randomness and persistence remain at the storage edge. Authenticated context binds ciphertext to Reader/type/record identity. Failure messages and logs exclude supplied credential material.
+- **Snapshot:** matches installed and locked dependencies: Python 3.14.6, FastAPI 0.143.3, SQLAlchemy 2.1.5, Alembic 1.20.0, Typer 0.27.3, Pydantic 2.14.1, cryptography 50.0.2. No major-version mismatch.
 
 ### Spec
-- **[minor]** `tests/service/test_channels.py:77,154`, `tests/cli/test_cli.py:130`
-  - Source: AC-1, "no Channel Revision is created".
-  - Problem: these tests count Revisions only after a rollback, so they would miss a Revision that was flushed and then rolled back.
-  - Fix: count, and check `current_revision_id`, before any rollback.
-- **[minor]** `tests/service/test_plugins.py:39-41`
-  - Source: AC-5, system path.
-  - Problem: only the pure `creator_of(None)` is tested.
-  - Fix (optional): add a repository round-trip of a `reader_id=NULL`, `created_by="system"` row.
-- **[minor]** `tests/service/test_schema.py:12,44-59`
-  - Source: AC-53, "Every table for Channel-owned records also has a Channel id column".
-  - Problem: the foreign-key heuristic skips `channel_revision` and any table that is Channel-owned only indirectly.
-  - Fix: assert `channel_revision` explicitly, and either declare the Channel-owned tables or follow foreign-key chains.
-- **[minor]** `src/news/service/models.py:15-18`
-  - Source: AC-53 and D-18 allow only "Built-in Plugin tables and declared app-wide tables".
-  - Problem: the `reader` exemption fits neither category.
-  - Fix: record it in ADR 0007 or the spec, or treat `reader.id` as the table's Reader id.
-- **[minor]** `src/news/service/models.py`
-  - Source: D-2, "immutable … Revisions".
-  - Problem: immutability is a convention and nothing enforces it.
-  - Fix (optional): add a `before_update` guard, or record the convention.
-- **Scope:** nothing beyond the ticket. `db upgrade` and `reader create` are needed for the CLI to work.
+
+- None. **Verdict:** pass for ticket 02's portion of AC-23 and ADR 0009.
+- Tests assert committed Provider ciphertext differs from plaintext, decrypts with its owner's Data Key, and rejects another Reader's key. Secrets and Provider credentials share one wrapped Data Key per Reader. Wrong Master Keys and swapped ciphertext fail authentication.
+- Explicit `news key generate` satisfies ADR 0009's optional first-local-run generation. It prints one key line per invocation without retaining it. Configured or previously used keys prevent generation; repeated explicit generation before configuration or encrypted data exists is documented.
+- Hidden CLI prompts and committed saves implement the requested Secret and Provider commands. No unrelated scope expansion or ADR contradiction found.
 
 ### Code-complete evidence
-- **[major]** The cross-Reader Plugin Revision case is not tested.
-  - This is the same issue as the Standards major, recorded here as an evidence gap under AC-1's failure modes.
-- **[minor]** `tests/service/test_schema.py:28-37`
-  - Problem: no recorded red shows the Reader-id check failing on a table without `reader_id`. On the empty red database it passed vacuously.
-  - Fix: record a temporary-mutation check in the evidence, or unit-test the check on a throwaway schema.
-- **[minor]** `evidence/01.md`, AC-1 service red
-  - Problem: the red is recorded as a count only, against `NotImplementedError` stubs.
-  - Fix: include a trimmed excerpt next time, preferably from stubs that return instead of raising.
-- **[minor]** `src/news/cli/main.py:91-115`
-  - Problem: passing a `--reader` id that doesn't exist dumps a raw `IntegrityError` traceback.
-  - Fix: print "no Reader <id>" and exit 1, with a CLI test.
-- **[minor]** `src/news/service/observability.py:18`
-  - Problem: JSON logs and CLI output share stdout. The CLI tests take the last line as a workaround.
-  - Fix (optional): send CLI logs to stderr, or document the split. Assert the rejected log line once at CLI level.
+
+- None. **Verdict:** pass. `evidence/02.md` records red failures for missing behavior followed by green runs. History confirms tests were committed with production changes in `544e1d9`, `305f3e6`, and `de7a685`. Later assertions extend the initial isolation/authentication coverage.
+- Happy paths, failure modes, boundaries, and edge cases are covered narratively and in actual tests. No tests were deleted, weakened, skipped, or marked xfail in the ticket delta.
+- Introduced boundaries use real cryptography, migrated SQLite, real key files, CLI calls, and committed reads. No internal collaborators are mocked. No Provider network boundary is introduced.
 
 ## Criteria evidence
+
+Test names below are from `tests/service/test_credentials.py`, `test_encryption.py`, `test_keys.py`, and `tests/cli/test_credentials.py`. There are 39 new test cases.
+
 | Criterion | Tests (names) | Happy | Failure | Boundary | Edge | Red-first | Green |
 |---|---|---|---|---|---|---|---|
-| AC-1 | `test_binding_config.py` (8); `test_manifest.py` (9); `test_channels.py`: `test_binding_with_valid_config_creates_a_pinned_revision`, `test_binding_missing_a_required_field_is_rejected_and_no_revision_is_created`, `test_rejected_revision_is_logged_with_the_channel_and_errors`, `test_unknown_field_is_rejected_when_the_schema_forbids_it`, `test_unknown_field_is_kept_when_the_schema_allows_it`, `test_binding_to_a_missing_plugin_revision_is_rejected`, `test_one_invalid_binding_rejects_the_whole_revision`, +5; `test_cli.py` (7) | yes | partial: cross-Reader Plugin Revision untested (major); "no Revision" only asserted after rollback (minor) | yes | yes | yes | yes |
-| AC-5 | `test_revision_created_by_a_reader_records_that_readers_id`, `test_revision_created_without_a_reader_records_system_as_creator`, `test_created_plugin_is_owned_by_the_reader_with_a_first_revision`, `test_plugin_with_an_invalid_manifest_is_rejected_and_not_saved`, `test_revisions.py` (3) | yes | yes | yes (first number) | n/a: two-valued rule | yes | yes |
-| AC-53 | `test_schema.py` (8) | yes | not demonstrated failing (minor) | partial: `channel_revision` not checked (minor) | yes (drift, stale exemptions, non-vacuous) | yes | yes |
-| ADR 0017 layering | import-linter `layers` contract | yes | yes (violations injected, reported broken) | n/a | n/a | yes | yes |
+| AC-23: encrypted storage and per-Reader envelope | `test_provider_and_secret_use_one_wrapped_reader_key`; `test_provider_updates_and_identical_names_remain_reader_scoped`; `test_readers_cannot_read_each_others_secrets_or_use_each_others_keys`; `test_secret_updates_reuse_key_and_keep_only_ciphertext`; `test_credentials_have_reader_scoped_tables` | yes: committed round-trip, shared wrapped key | yes: wrong Reader's key rejected | yes: empty/Unicode via encryption tests | yes: updates, identical names across Readers | yes: slices 1–2, `544e1d9`, `305f3e6` | yes |
+| AC-23 / ticket: authentication and safe logging | `test_wrong_master_key_fails_without_replacing_the_reader_key`; `test_ciphertexts_cannot_be_swapped_between_secret_records`; `test_wrapped_data_keys_cannot_be_swapped_between_readers`; `test_decryption_rejects_wrong_keys_context_and_damaged_data`; `test_cli_saves_credentials_without_echoing_or_logging_them`; `test_saving_with_a_missing_or_wrong_key_leaves_credentials_unchanged` | yes: save/unwrap/use without sentinel in logs | yes: wrong keys, tampering, safe failure events | yes: truncated ciphertext, key/nonce lengths | yes: swaps, unchanged stored credentials | yes: slices 1–3, `544e1d9`, `305f3e6`, `de7a685` | yes |
+| ADR 0009 / ticket: Master Key sources and generation | `test_master_key_can_come_from_environment`; `test_docker_secret_file_is_read_without_changing_it`; `test_invalid_missing_and_conflicting_sources_fail_without_logging_key_values`; `test_non_ascii_key_files_are_reported_safely`; `test_first_run_generation_prints_one_key_and_stores_nothing`; `test_generation_refuses_to_replace_a_lost_key` | yes: env/file, one generated key line | yes: missing/malformed/conflicting/unreadable sources | yes: empty, wrong-length, non-ASCII | yes: configured/used key refused, file unchanged | yes: slice 3, `de7a685` | yes |
+
+All four categories apply to the combined in-scope behavior and are exercised; none is silently omitted. Plugin environment and Gateway-use assertions are deferred portions, not claimed coverage here. CLI tests verify stored database bytes exclude the sentinel, generated keys are absent from logs and environment, and failed saves preserve existing credentials.
 
 ## Gates
-Each reviewer ran these independently.
+
+Fresh runs at `6116d5ef8b568d0eff0ab159ff1a60a183026de9`:
 
 | Gate | Command | Result |
 |---|---|---|
-| Typecheck | `uv run pyright` | pass (strict, 0 errors) |
-| Lint | `uv run ruff check . && uv run ruff format --check . && uv run lint-imports` | pass (1 contract kept) |
-| Full suite | `uv run pytest` | pass (53 tests, 0 skipped) |
-| Build | `uv build` | pass |
+| Typecheck | `uv run pyright` | pass; 0 errors, 0 warnings, 0 informations |
+| Lint | `uv run ruff check .` | pass |
+| Format | `uv run ruff format --check .` | pass; 135 files already formatted |
+| Imports | `uv run lint-imports` | pass; 1 contract kept, 0 broken |
+| Full suite | `uv run pytest` | pass; 186 tests, 0 skipped, 4.76 s |
+| Focused spec verification | `uv run pytest tests/service/test_encryption.py tests/service/test_credentials.py tests/service/test_keys.py tests/cli/test_credentials.py -q` | pass; 39 cases |
+| Diff whitespace | `git diff --check 0d34a6e 6116d5e` | pass |
+
+The full suite includes migration/schema drift checks and installed-wheel migration packaging coverage. No production code changed during review; only this report was written afterward.
 
 ## Observability delivered
-- **Logs:**
-  - `info channel_revision.rejected`, with `channel_id` and `errors`, written as structlog JSON on stdout. Tested at service level with `capture_logs`, and JSON formatting is tested separately.
-  - Other failures (invalid Manifest, unknown Channel, unknown Reader) are not logged (minor).
-- **Metrics:** none. The spec allows only the four Gateway metrics, which belong to tickets 09–11.
+
+- **Logs:** `warning keys.source_failed` with fixed reasons; `warning credentials.decrypt_failed` with Reader id; `info credentials.secret_not_found` with Reader and Secret ids. CLI logs go to its configured JSON log file; server logging is configured for stdout. Service capture and actual CLI log/output tests exclude the sentinel on success and failure. Generated Master Keys are excluded from logs.
+- **Metrics:** none new, as justified in `evidence/02.md`. The spec reserves metrics for four Gateway families, implemented in later tickets.
 
 ## Not verified
+
 Code complete is not deployment verified. This review did **not** verify:
-- Deployment, runtime behavior in the target environment, or real traffic and data.
-- Postgres. Repository and schema tests ran on SQLite only, and AC-58 is ticket 21.
-- Running `news db upgrade` from an installed wheel or the container image. It is known to depend on the source-tree `alembic/` folder.
-- SQLite WAL behavior with the CLI and the server process writing at the same time.
+
+- Deployment, container runtime behavior, server stdout under real traffic, or production data.
+- Postgres execution; these tests run on SQLite. Postgres testing is ticket 21.
+- Plugin Secret delivery and environment isolation (ticket 03), or Provider decryption and calls through the Gateway (ticket 09).
+- Master Key rotation tooling or KMS/Vault implementations, explicitly outside this ticket.
 
 ## Deployment verification checklist
-Evaluate manually or in the observability system to confirm the deployed change matches the intent of the spec or ticket.
 
-- [ ] **`news db upgrade` on a fresh volume** (`news --database-url sqlite:////data/news.db db upgrade`): prints "Database is up to date.", and `sqlite3 /data/news.db 'PRAGMA journal_mode'` returns `wal`.
-- [ ] **Create commands** (`news reader create Ada`, then `news plugin create --reader <id> --manifest manifest.toml --code main.py`, then `news channel create --reader <id> Local`): each prints an id and exits 0.
-- [ ] **Valid bind** (`news channel bind … --config '{"url":"https://example.com/rss"}'`): prints "Saved Channel Revision 2.".
-- [ ] **Invalid bind** (`news channel bind … --config '{}'`): exits 1 and prints `bindings.0.url: 'url' is a required property` on stderr. `SELECT count(*) FROM channel_revision WHERE channel_id=…` is unchanged.
-- [ ] **Rejection log** (`docker logs <container>` or the CLI's stdout): one JSON line with `"event": "channel_revision.rejected"`, `"level": "info"`, the `channel_id` and the `errors` list.
-- [ ] **Malformed config** (`--config '[1]'` and `--config '{url:'`): exit 2 with "must be a JSON object" and "not valid JSON".
-- [ ] **Creator** (`SELECT created_by FROM plugin_revision`): returns the creating Reader's id.
-- [ ] **After the major fix, cross-Reader bind:** binding another Reader's Plugin Revision is rejected with `bindings.0.plugin_revision_id`.
+- [ ] **Initial setup:** apply `news db upgrade`, then run `news key generate` with no key source configured on a fresh database. Confirm one key line is printed. Save it outside the database; supply it through exactly one of `NEWS_MASTER_KEY` or `NEWS_MASTER_KEY_FILE` afterward.
+- [ ] **Persist and restart:** create a Reader, then use `news secret set --reader <id> FEED_TOKEN` and `news provider add --reader <id> --url <provider-url> Local` with disposable credentials. Restart with the same Master Key; confirm the service can read the Secret. Inspect `reader_data_key`, `secret`, and `llm_provider`: key/credential fields contain ciphertext and no plaintext test credential.
+- [ ] **Wrong-key protection:** supply a different valid Master Key and attempt credential update/use. Confirm failure, then restore the original key and verify the original credential remains usable and unchanged.
+- [ ] **Key file:** repeat a credential operation using mounted `NEWS_MASTER_KEY_FILE`, with `NEWS_MASTER_KEY` unset. Confirm success and that the file is unchanged.
+- [ ] **Log inspection:** inspect CLI JSON logs and deployed server stdout for the test credential and Master Key values; neither appears. Wrong-key failure records `credentials.decrypt_failed` with Reader id and no supplied key material.

@@ -17,6 +17,7 @@ Design phase. There is no code yet; the architecture is captured in the docs bel
 
 - [`CONTEXT.md`](CONTEXT.md): glossary of domain terms. Start here.
 - [`docs/adr/`](docs/adr/README.md): architecture decision records, with an index of their status and amendments.
+- [`docs/credentials.md`](docs/credentials.md): Master Key setup and encrypted Secret / Provider CLI commands.
 
 Planned stack: Python + FastAPI, SvelteKit (static), SQLite by default with Postgres support, shipped as a single container.
 
