@@ -82,6 +82,18 @@ No tests were deleted, weakened, skipped, or marked xfail. Implementation commit
 - CI jobs identify the failing gate: typecheck, lint, SQLite tests, Postgres tests, or docs.
 - No new app events or metrics, as explicitly required by this ticket. Metrics would not add useful runtime measurement to this local consistency check.
 
+## Follow-up status (2026-10-18)
+
+The findings and verdict above describe the reviewed `45b8d93` snapshot. The parser major
+was subsequently repaired by `f4af4b7`, after failing regressions were committed in
+`eac2b2e`. The focused suite now passes 47 cases and the full SQLite suite passes 473;
+typecheck, lint, formatting, import boundaries and the current ADR check also pass.
+See [the fix report](../fix-adr-index-first-row/report.md) for red/green evidence.
+
+The historical AC-59 test-first finding remains open. Its original disclosure is preserved,
+and no user override or independent review of the repair is claimed. The overall ticket
+therefore remains **NOT CODE COMPLETE** under the strict workflow.
+
 ## Not verified
 
 Code complete is not deployment verified. This review did **not** verify:
