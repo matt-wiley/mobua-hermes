@@ -42,7 +42,7 @@ target-version = "py314"
 select = ["E", "F", "W", "I", "B", "UP", "SIM", "RUF"]
 
 [tool.pyright]
-include = ["src", "tests"]
+include = ["src", "tests", "scripts"]
 pythonVersion = "3.14"
 typeCheckingMode = "strict"
 venvPath = "."
