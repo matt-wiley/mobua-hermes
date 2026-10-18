@@ -9,6 +9,7 @@ from typing import Any
 
 import pytest
 from sqlalchemy import Connection, Engine, event, select, text
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from structlog.testing import capture_logs
 
@@ -263,7 +264,7 @@ def test_a_failed_commit_leaves_the_draft_revisions_pointer_and_bindings(
     fail_commits_on(engine, "plugin_draft", "DELETE")
 
     lifecycle.promote(session, lifecycle.draft)
-    with pytest.raises(Exception, match="FOREIGN KEY"):
+    with pytest.raises(IntegrityError, match=r"(?i)foreign key"):
         session.commit()
 
     assert committed_state(engine) == before
@@ -369,7 +370,7 @@ def concurrent_write_before(
     engine: Engine, statement_prefix: str, write: Callable[[Connection], None]
 ) -> Generator[None]:
     """Commit `write` on another connection just before this engine runs the given statement."""
-    other = create_engine_for(str(engine.url))
+    other = create_engine_for(engine.url.render_as_string(hide_password=False))
     fired = False
 
     def interleave(_conn: Any, _cursor: Any, statement: str, *_args: Any) -> None:
@@ -511,7 +512,7 @@ def test_a_promotion_overlapping_an_uncommitted_sibling_promotion_waits_then_con
     """The competitor holds its Plugin-row claim, uncommitted, while this promotion starts."""
     sibling = lifecycle.new_draft(session, lifecycle.starter.id)
     session.commit()
-    other = create_engine_for(str(engine.url))
+    other = create_engine_for(engine.url.render_as_string(hide_password=False))
     claimed, release = threading.Event(), threading.Event()
     competing: list[uuid.UUID] = []
 

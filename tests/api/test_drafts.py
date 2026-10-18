@@ -19,7 +19,7 @@ from tests.service.factories import a_built_in_plugin_revision, a_reader
 
 @pytest.fixture
 def client(engine: Engine, monkeypatch: pytest.MonkeyPatch) -> Iterator[TestClient]:
-    monkeypatch.setenv("NEWS_DATABASE_URL", str(engine.url))
+    monkeypatch.setenv("NEWS_DATABASE_URL", engine.url.render_as_string(hide_password=False))
     previous = structlog.get_config()
     try:
         with TestClient(app, raise_server_exceptions=False) as client:
