@@ -1,0 +1,60 @@
+[project]
+name = "news"
+version = "0.1.0"
+description = "Personal news app: Channels collect with Plugins and write Articles in the Reader's Style."
+readme = "README.md"
+license = "AGPL-3.0-only"
+requires-python = ">=3.14"
+dependencies = [
+    "alembic>=1.20.0",
+    "fastapi>=0.143.3",
+    "jsonschema>=4.26.0",
+    "pydantic>=2.14.1",
+    "sqlalchemy>=2.1.5",
+    "structlog>=26.1.0",
+    "typer>=0.27.3",
+]
+
+[project.scripts]
+news = "news.cli.main:app"
+
+[build-system]
+requires = ["uv_build>=0.8,<0.9"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "httpx2>=2.13.1",
+    "import-linter>=2.15",
+    "pyright>=1.1.414",
+    "pytest>=9.1.1",
+    "ruff>=0.17.1",
+    "types-jsonschema>=4.26.0.20261006",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py314"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "SIM", "RUF"]
+
+[tool.pyright]
+include = ["src", "tests"]
+pythonVersion = "3.14"
+typeCheckingMode = "strict"
+venvPath = "."
+venv = ".venv"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = ["--strict-markers"]
+filterwarnings = ["error"]
+
+[tool.importlinter]
+root_package = "news"
+
+[[tool.importlinter.contracts]]
+name = "api and cli use only the service layer (ADR 0017)"
+type = "layers"
+layers = ["news.api | news.cli", "news.service"]

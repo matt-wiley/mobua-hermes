@@ -1,7 +1,7 @@
 ---
 id: design-consistency-pass-01
 title: Scaffold the core module and the revisioned Channel/Plugin data model
-status: todo
+status: done
 blocked_by: []
 external: null
 ---
