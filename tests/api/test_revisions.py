@@ -155,7 +155,11 @@ def test_api_older_parent_promotion_requires_and_accepts_confirmation(
 
 
 def test_api_promotion_losing_a_race_for_the_number_is_an_actionable_conflict(
-    client: TestClient, engine: Engine, ids: Ids, session: Session
+    client: TestClient,
+    engine: Engine,
+    ids: Ids,
+    session: Session,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
     sibling = create_draft(session, ids.reader, ids.plugin, ids.starter)
     session.commit()
@@ -178,6 +182,10 @@ def test_api_promotion_losing_a_race_for_the_number_is_an_actionable_conflict(
     assert history["current_revision_id"] == str(competing[0])
     assert sorted(revision["number"] for revision in history["revisions"]) == [1, 2]
     assert ids.draft in [row[0] for row in committed_state(engine)["drafts"]]
+    logs = [json.loads(line) for line in capsys.readouterr().out.splitlines()]
+    events = [(line["event"], line.get("reason")) for line in logs]
+    assert ("plugin_draft.conflict", "stale_current_selection") in events
+    assert "api.database_failed" not in [event for event, _ in events]
 
 
 def test_api_selects_any_revision_without_creating_one_or_moving_bindings(

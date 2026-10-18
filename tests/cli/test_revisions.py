@@ -227,20 +227,23 @@ def test_cli_selects_an_older_revision_without_moving_bindings(database_url: str
     assert state(database_url) == after
 
 
-@pytest.mark.parametrize("target", ["unknown", "other_plugin", "foreign_plugin"])
+@pytest.mark.parametrize(
+    "target", ["unknown", "other_plugin", "foreign_revision", "foreign_plugin"]
+)
 def test_cli_rejects_selections_outside_the_readers_plugin(database_url: str, target: str) -> None:
     ids = bound_draft(database_url)
     reader, _, starter, _ = ids
     other = json.loads(news(database_url, "plugin", "create", "--reader", reader, "Other").stdout)
-    before = state(database_url)
-    actor = (
-        (created_id(news(database_url, "reader", "create", "Mallory")), *ids[1:])
-        if target == "foreign_plugin"
-        else ids
+    mallory = created_id(news(database_url, "reader", "create", "Mallory"))
+    theirs = json.loads(
+        news(database_url, "plugin", "create", "--reader", mallory, "Theirs").stdout
     )
+    before = state(database_url)
+    actor = (mallory, *ids[1:]) if target == "foreign_plugin" else ids
     revision = {
         "unknown": str(uuid.uuid7()),
         "other_plugin": other["revision_id"],
+        "foreign_revision": theirs["revision_id"],
         "foreign_plugin": starter,
     }[target]
 
@@ -266,7 +269,11 @@ def test_cli_promotion_needs_exactly_one_version_source(database_url: str, args:
 
 @pytest.mark.parametrize(
     "operation,table,event",
-    [("promote", "plugin_draft", "DELETE"), ("select", "plugin", "UPDATE")],
+    [
+        ("promote", "plugin_draft", "DELETE"),
+        ("promote", "plugin_revision", "INSERT"),
+        ("select", "plugin", "UPDATE"),
+    ],
 )
 def test_cli_commit_failure_prints_no_success(
     database_url: str,

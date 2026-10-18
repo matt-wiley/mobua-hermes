@@ -1,5 +1,7 @@
 """Promoting saved Drafts into permanent, current Plugin Revisions (AC-65, AC-66, AC-81)."""
 
+import threading
+import time
 import uuid
 from collections.abc import Callable, Generator
 from contextlib import contextmanager
@@ -264,6 +266,7 @@ def test_a_failed_commit_leaves_the_draft_revisions_pointer_and_bindings(
     with pytest.raises(Exception, match="FOREIGN KEY"):
         session.commit()
 
+    assert committed_state(engine) == before
     session.rollback()
     assert committed_state(engine) == before
 
@@ -436,12 +439,24 @@ def test_a_save_racing_the_promotion_is_a_conflict_after_rollback(
         )
 
     with (
+        capture_logs() as logs,
         concurrent_write_before(engine, "UPDATE plugin SET", save_elsewhere),
         pytest.raises(DraftConflict) as raised,
     ):
         lifecycle.promote(session, lifecycle.draft)
 
     assert (raised.value.expected, raised.value.actual) == (1, 2)
+    assert logs[-1] == {
+        "event": "plugin_draft.conflict",
+        "log_level": "info",
+        "reader_id": str(lifecycle.reader_id),
+        "plugin_id": str(lifecycle.plugin_id),
+        "draft_id": str(lifecycle.draft.id),
+        "operation": "promote",
+        "expected_version": 1,
+        "actual_version": 2,
+        "reason": "stale_version",
+    }
     session.rollback()
     after = committed_state(engine)
     assert after["current"] == [(lifecycle.plugin_id, lifecycle.starter.id)]
@@ -486,6 +501,54 @@ def test_a_sibling_promotion_racing_for_the_same_number_is_a_conflict_after_roll
     session.rollback()
     after = committed_state(engine)
     assert after["current"] == [(lifecycle.plugin_id, competing[0].id)]
+    assert lifecycle.draft.id in [row[0] for row in after["drafts"]]
+    assert sorted(row[1] for row in after["revisions"]) == [1, 2]
+
+
+def test_a_promotion_overlapping_an_uncommitted_sibling_promotion_waits_then_conflicts(
+    engine: Engine, session: Session, lifecycle: Lifecycle
+) -> None:
+    """The competitor holds its Plugin-row claim, uncommitted, while this promotion starts."""
+    sibling = lifecycle.new_draft(session, lifecycle.starter.id)
+    session.commit()
+    other = create_engine_for(str(engine.url))
+    claimed, release = threading.Event(), threading.Event()
+    competing: list[uuid.UUID] = []
+
+    def hold_after_claim(_conn: Any, _cursor: Any, statement: str, *_args: Any) -> None:
+        if statement.startswith("UPDATE plugin SET") and not claimed.is_set():
+            claimed.set()
+            release.wait(10)
+
+    def promote_sibling() -> None:
+        with Session(other) as competitor:
+            competing.append(lifecycle.promote(competitor, competitor.merge(sibling)).id)
+            competitor.commit()
+
+    event.listen(other, "after_cursor_execute", hold_after_claim)
+    thread = threading.Thread(target=promote_sibling)
+    thread.start()
+    try:
+        assert claimed.wait(10)
+        hold = 0.3
+        threading.Timer(hold, release.set).start()
+        started = time.monotonic()
+        with capture_logs() as logs, pytest.raises(CurrentSelectionConflict) as raised:
+            lifecycle.promote(session, lifecycle.draft)
+        waited = time.monotonic() - started
+    finally:
+        release.set()
+        thread.join(10)
+        other.dispose()
+
+    assert waited >= hold
+    assert raised.value.reason == "stale_current_selection"
+    assert raised.value.actual == competing[0]
+    assert logs[-1]["event"] == "plugin_draft.conflict"
+    assert logs[-1]["draft_id"] == str(lifecycle.draft.id)
+    session.rollback()
+    after = committed_state(engine)
+    assert after["current"] == [(lifecycle.plugin_id, competing[0])]
     assert lifecycle.draft.id in [row[0] for row in after["drafts"]]
     assert sorted(row[1] for row in after["revisions"]) == [1, 2]
 

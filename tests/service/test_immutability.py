@@ -2,6 +2,7 @@
 
 import uuid
 from collections.abc import Callable
+from datetime import UTC, datetime
 
 import pytest
 from sqlalchemy import Engine, delete, select, update
@@ -86,6 +87,31 @@ def test_changing_a_committed_row_is_rejected_and_leaves_it_stored_unchanged(
     assert attribute in str(raised.value)
     session.rollback()
     assert stored_columns(engine, type(row), row.id) == before
+
+
+@pytest.mark.parametrize(
+    ("attribute", "value"),
+    [
+        ("code", {"main.py": "print('edited')"}),
+        ("parent_revision_id", uuid.uuid7()),
+        ("created_by", "someone-else"),
+        ("created_at", datetime(2000, 1, 1, tzinfo=UTC)),
+    ],
+)
+def test_plugin_revision_code_ancestry_and_metadata_cannot_change(
+    engine: Engine, session: Session, attribute: str, value: object
+) -> None:
+    """AC-68: Manifest, code, ancestry and metadata stay as promoted."""
+    plugin_revision, _ = a_bound_channel(session)
+    before = stored_columns(engine, PluginRevision, plugin_revision.id)
+
+    setattr(plugin_revision, attribute, value)
+    with pytest.raises(ImmutableRevisionError) as raised:
+        session.flush()
+
+    assert raised.value.attributes == [attribute]
+    session.rollback()
+    assert stored_columns(engine, PluginRevision, plugin_revision.id) == before
 
 
 def test_every_changed_attribute_is_named(session: Session) -> None:
