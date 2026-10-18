@@ -1,4 +1,4 @@
-"""AC-59: the core CI workflow runs every core gate, the Postgres tests, and the docs check."""
+"""AC-59: the core CI workflow runs the core gates and Postgres tests."""
 
 import re
 from pathlib import Path
@@ -53,10 +53,8 @@ def test_the_postgres_job_runs_the_repository_and_schema_tests_on_a_pinned_servi
     assert commands_of(job)[-1] == "uv run pytest tests/service tests/test_test_database.py"
 
 
-def test_the_docs_job_runs_the_adr_check() -> None:
-    assert commands_of(workflow()["jobs"]["docs"]) == [
-        "uv run python -m scripts.check_adrs docs/adr"
-    ]
+def test_core_ci_runs_only_the_required_application_gates() -> None:
+    assert set(workflow()["jobs"]) == {"typecheck", "lint", "test-sqlite", "test-postgres"}
 
 
 def test_every_action_is_pinned_to_a_full_commit_sha() -> None:

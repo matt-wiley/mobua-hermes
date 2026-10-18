@@ -1,9 +1,9 @@
 ---
 version: 1
 tracker:
-  system: github
-  connector: gh               # GitHub CLI, repo matt-wiley/mobua-hermes
-  authority: external-for-status-assignee-priority; repo-for-detail-and-criteria
+  system: local
+  connector: null
+  authority: repo-for-status-detail-and-criteria
 layout:
   specs: docs/specs
   adr: docs/adr
@@ -44,8 +44,10 @@ modules:
 
 # mobua-swe repo config
 
-Written by `/mobua-swe:setup` on 2026-10-16 and updated on 2026-10-17. Every other skill reads this file and stops if it is missing or stale.
+Written by `/mobua-swe:setup` on 2026-10-16; command verification updated on 2026-10-17 and local-only tracking confirmed on 2026-10-18. Every other skill reads this file and stops if it is missing or stale.
 Skills pick the module from the files a ticket touches.
+
+Track status, detail, and criteria in local ticket files under `docs/specs/`. Do not create GitHub issues or use an external tracker connector.
 
 ## Status
 
