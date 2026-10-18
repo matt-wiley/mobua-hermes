@@ -1,13 +1,27 @@
-"""Saved Reader-owned Plugin Drafts (ADR 0024). Services flush; callers commit."""
+"""Saved Reader-owned Plugin Drafts and their promotion (ADR 0024). Services flush; callers commit.
+
+A conflict raised after promotion has written leaves those writes to the caller's rollback,
+which every surface performs on any exception.
+"""
 
 import uuid
 from typing import NoReturn
 
 import structlog
-from sqlalchemy import select, update
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.orm import Session
 
+from news.service.implementation import validate_implementation
+from news.service.manifest import PluginRevisionRejected
 from news.service.models import Plugin, PluginDraft, PluginRevision
+from news.service.revision_history import (
+    SelectionProblem,
+    current_revision_id,
+    move_current_pointer,
+    selection_conflict,
+    selection_problem,
+)
+from news.service.revisions import creator_of, next_revision_number
 from news.service.validation import FieldError, ValidationRejected
 from news.service.workspaces import implementation_files
 
@@ -51,7 +65,7 @@ def save_draft(
     try:
         check_version(expected_version, draft.version)
     except DraftConflict:
-        _conflict(reader_id, plugin_id, draft_id, expected_version, draft.version)
+        _conflict(reader_id, plugin_id, draft_id, "save", expected_version, draft.version)
     try:
         implementation_files(manifest, code)
     except ValidationRejected:
@@ -79,7 +93,7 @@ def save_draft(
     )
     if saved is None:
         actual = get_draft(session, reader_id, plugin_id, draft_id).version
-        _conflict(reader_id, plugin_id, draft_id, expected_version, actual)
+        _conflict(reader_id, plugin_id, draft_id, "save", expected_version, actual)
     session.flush()
     return saved
 
@@ -105,6 +119,7 @@ def _conflict(
     reader_id: uuid.UUID,
     plugin_id: uuid.UUID,
     draft_id: uuid.UUID,
+    operation: str,
     expected: int,
     actual: int,
 ) -> NoReturn:
@@ -113,7 +128,7 @@ def _conflict(
         reader_id=str(reader_id),
         plugin_id=str(plugin_id),
         draft_id=str(draft_id),
-        operation="save",
+        operation=operation,
         expected_version=expected,
         actual_version=actual,
         reason="stale_version",
@@ -221,3 +236,97 @@ def _not_found(
         draft_id=str(draft_id) if draft_id else None,
     )
     raise DraftNotFound("no such Reader-owned Plugin or Draft")
+
+
+def promote_draft(
+    session: Session,
+    reader_id: uuid.UUID,
+    plugin_id: uuid.UUID,
+    draft_id: uuid.UUID,
+    expected_version: int,
+    expected_current_revision_id: uuid.UUID | None = None,
+) -> PluginRevision:
+    """Copy a valid saved Draft into a new current Revision and delete the Draft.
+
+    A Draft whose parent is not the current Revision replaces that selection only when the
+    caller confirms it as `expected_current_revision_id`. Bindings never move.
+    """
+    draft = get_draft(session, reader_id, plugin_id, draft_id)
+    try:
+        check_version(expected_version, draft.version)
+    except DraftConflict:
+        _conflict(reader_id, plugin_id, draft_id, "promote", expected_version, draft.version)
+    try:
+        validate_implementation(draft.manifest, draft.code)
+    except PluginRevisionRejected as rejected:
+        log.info(
+            "plugin_draft.rejected",
+            reader_id=str(reader_id),
+            plugin_id=str(plugin_id),
+            draft_id=str(draft_id),
+            reason="invalid_implementation",
+            fields=[error.field for error in rejected.errors],
+        )
+        raise
+    current = current_revision_id(session, plugin_id)
+    problem = selection_problem(
+        current,
+        expected_current_revision_id,
+        needs_confirmation=draft.parent_revision_id != current,
+    )
+    if problem is not None:
+        _selection_conflict(draft, problem, expected_current_revision_id, current)
+
+    # Numbered from the whole history: the current Revision may be an older one.
+    latest = session.scalar(
+        select(func.max(PluginRevision.number)).where(PluginRevision.plugin_id == plugin_id)
+    )
+    revision = PluginRevision(
+        id=uuid.uuid7(),
+        plugin_id=plugin_id,
+        reader_id=reader_id,
+        number=next_revision_number(latest),
+        parent_revision_id=draft.parent_revision_id,
+        manifest=draft.manifest,
+        code=dict(draft.code),
+        created_by=creator_of(reader_id),
+    )
+    session.add(revision)
+    session.flush()
+    # Conditional writes catch a competing writer that changed either row after the reads above.
+    if not move_current_pointer(session, plugin_id, current, revision.id):
+        _selection_conflict(
+            draft,
+            "stale_current_selection",
+            expected_current_revision_id,
+            current_revision_id(session, plugin_id),
+        )
+    deleted = session.scalar(
+        delete(PluginDraft)
+        .where(PluginDraft.id == draft_id, PluginDraft.version == expected_version)
+        .returning(PluginDraft.id)
+    )
+    if deleted is None:
+        actual = get_draft(session, reader_id, plugin_id, draft_id).version
+        _conflict(reader_id, plugin_id, draft_id, "promote", expected_version, actual)
+    session.flush()
+    log.info(
+        "plugin_draft.promoted",
+        reader_id=str(reader_id),
+        plugin_id=str(plugin_id),
+        draft_id=str(draft_id),
+        parent_revision_id=str(draft.parent_revision_id),
+        revision_id=str(revision.id),
+    )
+    return revision
+
+
+def _selection_conflict(
+    draft: PluginDraft,
+    problem: SelectionProblem,
+    expected: uuid.UUID | None,
+    actual: uuid.UUID | None,
+) -> NoReturn:
+    selection_conflict(
+        draft.reader_id, draft.plugin_id, "promote", problem, expected, actual, draft.id
+    )
