@@ -1,28 +1,111 @@
 ---
 slug: plugin-drafts
 external: null
-confirmed: false
-spec_written: false
+confirmed: true
+spec_written: true
+spec_path: docs/specs/design-consistency-pass/spec.md
 ---
 # Grill: Plugin drafts and test runs
 
-Split from `docs/specs/review-followups-01/grill.md` (branch 14). Readers want to tinker with a Plugin in an uncommitted state, test-run it, and only then turn it into a Plugin Revision that Channels can use in scheduled runs. This amends ADR 0016 and ADR 0018 ("Editing a Plugin creates a new Plugin Revision") and the glossary's Revision entry ("Edits create new Revisions"). An ADR is expected.
+Split from `docs/specs/review-followups-01/grill.md` (branch 14). Readers want to tinker with a Plugin in a mutable Draft, test-run it, and promote selected experiments into permanent Plugin Revisions that Channels can explicitly bind to. ADRs 0024 and 0025 record the Draft lifecycle and Built-in global identity/lineage decisions and amend the earlier ADRs listed below.
 
-Must land before design-consistency-pass-03 (the Plugin Run launcher).
+The confirmed design is incorporated into the existing [design-consistency spec](../design-consistency-pass/spec.md), as requested after this interview. There is no separate Plugin drafts spec or ticket set. Pending tickets were renumbered: Reader Draft workspace/promotion are now 03–04, the process runner is 05, and full ephemeral tests are 15–16. See the [current plan and historical numbering map](../design-consistency-pass/tickets/README.md). Older interview references to the runner as ticket 03 describe the original numbering.
 
 ## Branches
 | # | Branch | Status | Decision |
 |---|---|---|---|
-| 1 | Shape of a draft | resolved | A separate mutable working copy per Plugin, distinct from Plugin Revisions. Promote validates it (Manifest, AC-49 pins) and creates an immutable Plugin Revision. Bindings reference only Revisions. Rejected: Revisions with a draft/promoted status (weakens immutability); editor-local drafts only (lost with browser storage, no cross-device). Decided 2026-10-17 in review-followups-01. |
-| 2 | Vocabulary: the term for the working copy and the verb ("Publish" is taken by the Channel process; candidates: Promote) | unresolved | |
-| 3 | Cardinality: one draft per Plugin, or per Reader per Plugin; does a new Plugin start as a draft only | unresolved | |
-| 4 | Scope: Plugins only, or Channels too | unresolved | |
-| 5 | Surfaces: service layer (required by ADR 0017), API, Web App; what the CLI offers (e.g. create-and-promote) | unresolved | |
-| 6 | Test runs: hardened launcher, no ingest, output shown; Channel context for Channel Models, Secrets and budget; call records and attribution; logs | unresolved | |
-| 7 | Built-in Plugins and Eject: no drafts on Built-ins; does Eject land in a draft or a Revision | unresolved | |
-| 8 | Impact on design-consistency-pass tickets (03 launcher inputs, 06 Eject, 10 Gateway Tokens) and ACs (AC-2, AC-3, AC-8, AC-49) | unresolved | |
-| 9 | ADR: amending 0016/0018 | unresolved | |
-| 10 | Observability and deployment verification | unresolved | |
+| 1 | Shape of a draft | resolved | Separate mutable working copies belonging to a Plugin, distinct from Plugin Revisions. Promote validates a draft (Manifest, AC-49 pins) and creates an immutable Plugin Revision. Bindings reference only Revisions. Rejected: Revisions with a draft/promoted status (weakens immutability); editor-local drafts only (lost with browser storage, no cross-device). Initial shape decided 2026-10-17 in review-followups-01; multiple drafts clarified by the Reader in this grill. |
+| 2 | Vocabulary: the term for the working copy and the verb | resolved | Plugin Draft is the mutable working copy; Promote validates it and creates an immutable Plugin Revision. Publish remains the Channel's Article-writing process. Confirmed 2026-10-17. |
+| 3 | Cardinality and parent Revision | resolved | A Reader can create many Plugin Drafts for a Plugin to try different approaches. Each draft must have exactly one parent Plugin Revision. Multiple drafts may share a parent; the Reader may choose one to promote. Rejected: at most one draft per Plugin. Confirmed 2026-10-17. Promotion's effect on sibling drafts is tracked separately. |
+| 4 | Scope: Plugins only, or Channels too | resolved | This Draft process applies only to Plugins. Channel editing continues to create immutable Channel Revisions directly; no Channel Draft workflow is introduced. Confirmed 2026-10-17. |
+| 5 | Surfaces | resolved | Expose the full Draft workflow through shared services and both CLI and API: create/edit/delete/test/promote Drafts, view Revision history, and select the current Revision. Add Web App screens when the frontend exists; no frontend scaffolding in this change. CLI interaction details are tracked in branch 29. Confirmed 2026-10-17. |
+| 6 | Test Run workflow | resolved | Consolidated in branches 22–28 and 32–33: validate the saved Draft and temporary config, execute in a selected Reader-owned Channel context with normal hardening/limits and real external calls, preview only, keep no durable Test Run history or snapshots, retain tagged Gateway usage accounting, do not drive Channel Health or take a Run Lease, and cancel/clean up on disconnect. |
+| 7 | Built-in Plugins and Eject | resolved | Built-ins remain read-only to Readers (branch 13). Eject creates a new Reader-owned Plugin with the standard starter as Revision 1, then copies the Built-in's current implementation into Revision 2 and makes it current. Revision 2's parent is the new Plugin's Revision 1. No Draft review/promotion is required for the initial exact copy. The Plugin is immediately bindable and its history has no link to the Built-in. Existing Channels are not moved automatically. Further edits use Drafts. Confirmed 2026-10-17. |
+| 8 | Impact on design-consistency-pass tickets and criteria | resolved | Incorporated into the existing spec and same 21-ticket stream by subsequent user instruction. Completed 01–02/evidence are unchanged; pending 03–21 are revised and reordered, with coverage/deployment/log ownership and a historical numbering map in tickets/README.md. The existing spec now covers AC-1 through AC-82, including revised promotion/Binding, Eject, global Built-in identity, and Test Run/metadata criteria. Built-in update mechanics remain explicitly deferred. |
+| 9 | ADR amendments | resolved | ADR 0024 records Draft lifecycle, permanent Reader Revision trees, test semantics, shared surfaces, and Gateway metadata, amending ADRs 0012, 0016, 0018, 0019, 0021, and 0023. ADR 0025 amends ADRs 0019/0024 with global Built-in identity/lineage and replaces the local Built-in starter proposal. Reciprocal metadata and index entries are maintained. |
+| 10 | Observability and deployment verification | resolved | Log Draft promotions, explicit Draft deletions, rejected promotions, and stale edit/promotion conflicts with identifiers and safe reason codes. Do not log Manifest/code/config, credentials, or test output/stderr. Test results remain ephemeral; tagged real Gateway calls retain normal usage records/metrics. No additional Prometheus metrics. Deployment checks: create/save/export a Draft; reject stale save and invalid promotion without state changes; promote/delete atomically while retaining sibling Drafts; inspect/select Revision history without moving Bindings; run/cancel a hardened test with no Feed, schedule, or Channel Health changes; verify usage budgets and test tags while output/history are not persisted; confirm Built-in identity/read-only/Eject behavior and preservation of preexisting data. Logging scope confirmed 2026-10-17; checks follow the agreed behavior. |
+| 11 | First Revision of a Reader-owned Plugin | resolved | Every new Reader-owned Plugin starts with a valid starter implementation as Revision 1: it emits no News Items and exits successfully. This gives every Draft a real parent without permitting parentless Drafts. The earlier inclusion of Built-ins was replaced by branch 21: Built-ins retain global development lineage and need no locally manufactured starter. Confirmed 2026-10-17. |
+| 12 | Promotion's effect on current Revision and sibling drafts | resolved | Promoting a Draft creates a new Plugin Revision and makes it current. Sibling Drafts remain available with their original parent Revision; the Reader can continue experimenting or discard them explicitly. Confirmed 2026-10-17. |
+| 13 | Built-in ownership | resolved | Built-ins remain system-owned and read-only to Readers. The system manages their Revisions using the global identities and lineage in branch 21. Readers Eject to obtain their own editable Plugin and create Drafts there. Readers cannot change a shared Built-in's current pointer; their Channel Bindings can still pin an accessible Built-in Revision. Confirmed 2026-10-17. |
+| 14 | Promoted Draft lifecycle | resolved | Promotion copies the Draft's Manifest and code into a new immutable Plugin Revision, makes that Revision current, and deletes the Draft record atomically. The promoted Draft is a duplicate and is not retained or archived. Further edits require creating a new Draft from a Plugin Revision. Failed promotion preserves the Draft and leaves Revisions and the current pointer unchanged. Reconfirmed 2026-10-17 after distinguishing Revision archival from promoted Draft deletion. |
+| 15 | Promoting a Draft based on an older Revision | resolved | Allowed with explicit confirmation that the newly created Revision will replace the current Revision. Promotion copies the Draft as-is without merging intervening changes. Existing Channel Bindings remain pinned. Confirmed 2026-10-17. |
+| 16 | Reader-owned Revision ancestry and current Revision selection | resolved | Reader-owned Plugin Revisions form a tree: each promoted Revision records the parent Revision from its Draft, including when that parent is older than the current Revision. The starter Revision is the root. The Reader can view the complete Plugin Revision History and select any Revision as current at any time. Selecting a Revision does not create a Revision or move Channel Bindings. Confirmed 2026-10-17. Built-in permissions and global ancestry are addressed in branches 13 and 21. |
+| 17 | Permanent Revision retention | resolved | Revisions are never archived or deleted. Keep every Revision's full Manifest, code, ancestry, and metadata permanently. The Reader explicitly replaced the earlier deletion and archival proposals with permanent, fully selectable history. Confirmed 2026-10-17. |
+| 18 | Archive behavior | resolved | Not applicable: Revision archival is removed from the design by branch 17. No archive, unarchive, or deletion lifecycle is needed. |
+| 19 | Revision retention versus promoted Draft deletion | resolved | Plugin Revisions are permanent. Promoted Drafts are deleted because their contents have been copied into the new Revision. Unpromoted Drafts may also be deleted explicitly under branch 20. Confirmed 2026-10-17. |
+| 20 | Discarding an unpromoted Draft | resolved | A Reader can permanently delete their unpromoted Drafts. Drafts are disposable experiments; promoted Plugin Revisions are permanent. Promotion itself deletes the Draft after copying it into a new Revision. Confirmed 2026-10-17. |
+| 21 | Built-in global identity and lineage; update scope | resolved | Built-in Plugins and their Revisions have stable UUIDs and global lineage spanning app development, preserved across deployments. Releases may ship only the latest implementations to stay light; existing deployments can receive additional globally identified Revisions in future patch updates. Do not manufacture local Built-in ancestry, starter roots, or Draft/Promote steps to mimic Reader-owned Plugins; their lifecycles differ. Keep locally present Revisions permanently. Update delivery/installation/rollback mechanics are explicitly deferred to much later work, not unresolved work required by this grill. ADR 0025 amends ADRs 0019/0024. Representation of absent ancestors is tracked in branch 31. Confirmed 2026-10-17. |
+| 22 | Draft save validation versus promotion/test validation | resolved | Drafts can be saved with unfinished or invalid Manifest/code, including dependency declarations that do not yet satisfy exact-pin rules. Saving preserves work in progress. Promote and Test Run validate the saved Draft before proceeding and return specific errors without creating a Revision or starting execution on validation failure. Confirmed 2026-10-17. |
+| 23 | Test Run effects | resolved | Test Run executes a validated Draft using the same process hardening and resource/timeout limits as a regular Plugin Run. It previews output, output validation errors, and stderr, but ingests no News Items and leaves the Feed untouched. Network requests and any LLM calls are real; tests may spend tokens or affect upstream services. Confirmed 2026-10-17. |
+| 24 | Test Run context | resolved | Each Test Run requires an existing Channel selected by its owning Reader and temporary Plugin config supplied for the test. The Plugin need not already be bound to that Channel. Validate config against the Draft's Manifest schema. Use the selected Channel's named Models and normal token budgets, and inject only the Reader's Secrets declared by that Manifest. Do not create a Binding or change Channel configuration. All Plugin/Draft, Channel, and credential access remains Reader-scoped. Confirmed 2026-10-17. |
+| 25 | Test Run provenance and retention | resolved | Test Runs are ephemeral go/no-go checks: the Reader sees output and verifies it, then the result is throwaway. Do not persist a Test Run history or duplicate the Draft's Manifest/code/config into saved test snapshots. The Manifest and code remain saved on the Draft. Durable Gateway accounting for real LLM calls is addressed separately in branch 26. Rejected: retaining snapshots to explain old test results after a Draft changes or is deleted. Confirmed 2026-10-17. |
+| 26 | Gateway accounting for ephemeral Test Runs | resolved | Real LLM calls during Test Runs retain normal Gateway call records and metrics and count against the selected Channel's, Provider's, and Reader's applicable budgets. Keep ordinary usage accounting under ADR 0023 while discarding Test Run output/logs/execution details and avoiding code/Manifest snapshots. The Reader also requested extensible metadata/tags to identify Test Run calls for later analysis; contract details are tracked in branch 27. Confirmed 2026-10-17. |
+| 27 | Extensible Gateway call metadata/tags | resolved | Attach metadata per LLM call. Automatically add test_run: true and Plugin/Draft identifiers to test calls; allow additional caller-supplied tags. Store metadata with ordinary usage records and forward it separately from prompt text to Providers that support metadata. Unsupported forwarding must not prevent local tagging. The Gateway controls the test marker so Plugin code cannot override it. Retain the existing Prometheus label policy: arbitrary tags are not metric labels. This extends ADRs 0012/0023 through ADR 0024. Confirmed 2026-10-17. |
+| 28 | Test failures and Health | resolved | Draft Test Runs never drive Channel Health: show their errors only in the ephemeral test results. Plugin-related Channel Health is driven by normal runs of promoted Plugin Revisions. Real Provider failures during Test Runs still update Model Health, and Gateway usage records retain outcomes and test tags. This is a Test Run exception to ADRs 0021/0023's Channel Health failure/refusal rules; other existing Channel Health causes are unchanged. Confirmed 2026-10-17. |
+| 29 | CLI editing interaction | resolved | Use explicit export → edit → save → test → promote. Create a database Draft from a Plugin Revision, export its Manifest and code to a local directory, edit with any editor, then explicitly save local files back to the database Draft. Test and Promote operate on saved database contents, not unsaved local edits. Temporary test config is supplied separately. Provide list/delete Draft commands, Revision tree/history, and current-Revision selection. Deleting a database Draft leaves exported local files alone. Command spellings below are illustrative and may be refined during specification. Confirmed 2026-10-17. |
+| 30 | Concurrent Draft edits and promotion | resolved | Exports carry a Draft version marker. Save and Promote require the expected Draft version and reject stale requests with a conflict rather than overwrite or promote unseen changes. On conflict leave the Draft, Revisions, and current pointer unchanged; the Reader inspects/reconciles the newer Draft explicitly. Apply the same rule in shared services, API, and CLI. Confirmed 2026-10-17. |
+| 31 | Built-in history representation when an ancestor implementation is not installed | resolved | Show only the Built-in Revision history available locally. Do not bundle extra historical metadata, create placeholder history entries, fetch absent history, or expose unavailable ancestors to Readers. Preserve globally assigned identities and lineage for installed Revisions without requiring every ancestor implementation to exist locally. Exact persistence representation may differ from Reader-owned Plugin ancestry. Update mechanics remain deferred. Rejected: shipping a lightweight complete ancestry catalog without the implementations. Confirmed 2026-10-17. |
+| 32 | Test Run scheduling | resolved | Draft Test Runs may execute alongside the selected Channel's normal Collection or Publish. Borrow Channel Models and budgets without taking its Run Lease or changing its schedules. Normal per-process limits and shared Gateway budget enforcement still apply. Confirmed 2026-10-17. |
+| 33 | Test Run lifetime | resolved | Run in the foreground. Cancellation, CLI interruption, or API connection closure stops the subprocess, revokes Gateway access, and cleans temporary files. No resumable/retrievable background test job or durable Test Run record. Usage already incurred remains recorded. Confirmed 2026-10-17. |
+| 34 | Migration compatibility | resolved | Preserve existing Reader-owned Plugin Revisions, ids, numbering, contents, current selections, and Channel Bindings. Apply starter initialization only to newly created Reader-owned Plugins; do not insert an artificial starter into existing history or renumber Revisions. Existing history keeps its original starting point. Do not invent unrecorded parent relationships. Confirmed 2026-10-17. |
+| 35 | Delivery order | resolved | Integrate the complete workflow into the existing design-consistency spec and pending ticket stream. Revised tickets 03–04 deliver Reader-owned Draft storage/editing/deletion, validation, promotion, history, and selection before process runner 05. Tickets 15–16 complete ephemeral tests after the real runner, limits, Gateway, call-driven Model Health, accounting, and budgets. Exact-pin validation is pulled into promotion; hourly Model Health stays with scheduler 19. Do not claim the whole workflow complete before stage two. This replaces the original numeric references without changing the confirmed dependency intent. Confirmed 2026-10-17; consolidated by subsequent user instruction. |
+
+## ADRs
+- [0024: Plugins have disposable Drafts and permanent Revision trees](../../adr/0024-plugin-drafts-and-permanent-revision-history.md), amending ADRs 0012, 0016, 0018, 0019, 0021, and 0023.
+- [0025: Built-in Plugins preserve global identities and development lineage](../../adr/0025-built-in-plugin-identities-and-global-lineage.md), amending ADRs 0019 and 0024; replaces the earlier local Built-in starter proposal.
 
 ## Terms added to CONTEXT.md
-- (none yet)
+- Plugin Draft: a mutable working copy of a Plugin's Manifest and code, separate from its immutable Plugin Revisions.
+- Promote: validate and copy a Plugin Draft into a new current, immutable Plugin Revision, deleting the Draft; Channels can explicitly bind to the new Revision.
+- Plugin Revision History: permanent Reader-owned ancestry and Built-in global development ancestry, with only locally available implementations selectable or runnable.
+- Revision: clarified Channel edits versus Plugin Draft promotion.
+- Built-in Plugin: clarified global UUIDs and development lineage.
+- Test Run: an ephemeral Draft check using selected Channel context, with preview-only results and no Channel Health entries.
+
+## Scope and non-goals
+
+- Plugins only; Channel editing stays as it is.
+- Implement shared service, CLI, and API operations; frontend screens follow when the web module exists.
+- No persistent Test Run history, test snapshots, background test jobs, automatic merging, Revision archival/deletion, or automatic Binding movement.
+- Built-in update delivery, patch application, rollback, and remote history are deferred. No local imitation of Built-in development history.
+- A successful Test Run is a Reader's go/no-go aid, not a persisted promotion gate. Promotion validates the saved Draft independently.
+
+## Design and test seams
+
+- Pure rules: Manifest/dependency validation; temporary config validation; Reader/Plugin/parent eligibility; version-conflict decisions; promotion and current-selection state transitions; protected versus caller-supplied Gateway metadata.
+- Edges: migrated portable SQLAlchemy persistence, surface-owned transactions, local file import/export, subprocess management/cancellation, Secret delivery, scoped Gateway access, Provider forwarding, and structured operational logging.
+- Tests use real migrated databases and real transactions for atomicity, stale conflicts, ownership rejection, permanent Revision retention, and pinned Bindings. Preserve preexisting ids/contents/pointers/Bindings through migration; never infer missing ancestry from Revision numbering.
+- Container integration verifies real process hardening, limits, output preview, zero ingestion, cancellation/disconnect cleanup, and token revocation. Gateway tests cover real accounting semantics with a fake Provider boundary, protected test tags, metadata-capable/incapable adapters, refused calls, and no Test Run Channel Health entries.
+- Verify concurrent Channel operation is unaffected by Test Run execution except for normal shared budget consumption. In-memory execution inputs are captured once from the saved Draft; do not retain them as a historical snapshot.
+- Deployment checks and operational logging are specified in branch 10. A complete implementation report must distinguish these tests from deployment verification.
+
+## Integrated implementation ownership
+
+Current numbers refer to the amended [existing plan](../design-consistency-pass/tickets/README.md), which also maps historical interview ticket numbers.
+
+| Revised owner | Alignment |
+|---|---|
+| Completed 01–02 and review followups | Preserve original tickets, evidence, and reports. |
+| 03–04 | New compatible migration, starter, Draft workspace/version checks, promotion validation, permanent ancestry/history/current selection, shared CLI/API, and safe lifecycle logging. |
+| 05–06 | Shared hardened process runner and runtime limits; ingestion and normal Health belong outside reusable process execution. Exact-pin validation already comes from 04. |
+| 07–08 | Global Built-in identities/local-only history, initial bundled installation, independent Eject, read-only enforcement, and explicit pinned Binding upgrades. |
+| 09–14 | Time-zone settings, Gateway, call-driven Model Health, scoped access/metadata, usage records/metrics, budget enforcement/defaults. |
+| 15–16 | Ephemeral preview-only tests, actual shared accounting, no Channel Health/lease/schedule effects, foreground cancellation/disconnect cleanup, captured input stability. |
+| 17–20 | Safe Publish, retries/budget failures, scheduler/periodic health/purge, and real container smoke flows including Draft test → promotion → explicit Binding → normal Collection. |
+| 21 | ADR consistency, SQLite/Postgres repository checks, and core CI. |
+
+## Supporting references
+- [LiteLLM logging: Custom Tags](https://docs.litellm.ai/docs/proxy/logging), checked 2026-10-17: demonstrates request metadata containing tags for logging. Used as a design reference, without changing ADR 0012's decision to build the app's own Gateway.
+
+## Illustrative CLI workflow
+
+`R`, `P`, `D`, and `C` stand for Reader, Plugin, Draft, and Channel ids.
+
+```sh
+news plugin draft create --reader R --plugin P --from-revision 2
+news plugin draft export --reader R --draft D --directory ./experiment
+# Edit the exported Manifest and code in a local editor.
+news plugin draft save --reader R --draft D --directory ./experiment
+news plugin draft test --reader R --draft D --channel C --config-file ./test-config.json
+news plugin draft promote --reader R --draft D
+```

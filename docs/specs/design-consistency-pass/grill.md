@@ -6,6 +6,12 @@ spec_written: true
 ---
 # Grill: Design consistency pass
 
+The confirmed [Plugin drafts amendment](../plugin-drafts/grill.md) is incorporated into
+this same [spec](spec.md) by user instruction on 2026-10-17. Pending ticket numbers and
+responsibilities were revised; see the [implementation plan and historical map](tickets/README.md).
+The original decisions below remain the historical source for the base scope, qualified
+by the amendment and ADRs 0024/0025. Completed ticket evidence is unchanged.
+
 Resolve the contradictions, ambiguities, and gaps found in the review of `CONTEXT.md` and `docs/adr/` (2026-10-16), before any spec is written.
 
 ## Branches

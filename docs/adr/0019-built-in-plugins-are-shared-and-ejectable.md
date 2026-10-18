@@ -3,6 +3,7 @@
 Status: Accepted
 Date: 2026-10-16
 Amends: ADRs 0007, 0018
+Amended by: ADRs 0024, 0025
 
 ## Context
 
@@ -16,6 +17,19 @@ ADR 0007 scopes every record to a Reader, and ADR 0018 lets a Plugin Binding ref
 - A Reader who wants different behavior **ejects**: the app copies the Built-in Plugin's current Revision into a new Plugin owned by that Reader, created by that Reader. The copy has no link back to the built-in and is maintained independently from then on.
 
 The exception is safe because ADR 0007 protects Reader data, and built-in code is not Reader data. Reader data used with built-ins (config on Plugin Bindings, Secrets) stays in Reader-owned records.
+
+Initial Revision: amended by ADR 0024. Every Built-in starts with the valid starter root
+Revision before its shipped implementation. Built-ins remain read-only to Readers; the
+system manages their Revisions.
+
+Global identity and lineage: amended by ADR 0025. Built-ins preserve UUIDs and ancestry
+assigned during app development. They do not create local starter Revisions or simulate
+Reader Draft promotion. Releases may bundle only the latest implementations; update
+mechanics are deferred. This replaces the initial Built-in starter rule in ADR 0024.
+
+Eject initialization: amended by ADR 0024. The new Reader-owned Plugin receives its own
+starter Revision 1, followed by a copy of the Built-in's current implementation as current
+Revision 2. Revision 2's parent is the new Plugin's starter, with no link to the Built-in.
 
 ## Alternatives rejected
 

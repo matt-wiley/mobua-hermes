@@ -3,7 +3,7 @@
 Status: Accepted
 Date: 2026-10-16
 Amends: ADR 0016
-Amended by: ADR 0019
+Amended by: ADRs 0019, 0024
 
 ## Context
 
@@ -20,6 +20,10 @@ Split what a Plugin is from how a Channel uses it.
 - Editing a Plugin creates a new Plugin Revision that no Channel uses until it is explicitly moved to it. Moving a Channel creates a new Channel Revision and re-validates the Binding's config against the new schema. The Web App and CLI offer this as one action across selected Channels.
 
 Ownership (on the Plugin) is about scoping and access; creation (on the Plugin Revision) is provenance only.
+
+Plugin editing: amended by ADR 0024. Edits happen in disposable Plugin Drafts; promotion
+creates a new permanent Revision with the Draft's parent Revision and makes it current.
+Selecting any prior Revision as current is also allowed. Neither operation moves Bindings.
 
 ## Alternatives rejected
 
