@@ -110,6 +110,20 @@ exact-pin validation, and their operational logging form one independently verif
 Reader action. Ticket 11 similarly covers the scoped call contract and metadata
 Adapter boundary. No horizontal all-models or all-endpoints ticket is introduced.
 
+## Deferred decisions
+
+Ticket 04's review left these open on purpose. Each one is parked where it next matters. See
+[fix-review-minors-04](../../fix-review-minors-04/report.md) for the context.
+
+| Decision | When | Options |
+|---|---|---|
+| Isolation level the promotion claim relies on | Ticket 21 | Pin READ COMMITTED in `create_engine_for`, or keep the documented assumption and prove it on Postgres |
+| Naive `created_at` from SQLite outside `RevisionDetails` | Before ticket 09 | Shared UTC `TypeDecorator` on timestamp columns, or record why projections normalize |
+| Success events (`plugin_draft.promoted`, `.deleted`) logged at flush, before commit | Next grill | Emit after commit at the surfaces, or record flush-time events in the spec/ADR |
+| `plugin_revision.selection_rejected` and `plugin.not_found` not in the spec | Same grill | Amend the spec's Observability list, or fold them into listed events |
+| `ImmutableRevisionError` signals a bulk update with an empty attribute list | Any refactor | Explicit `operation` value or named constructors |
+| No researched standards for Typer 0.27, Pydantic 2.14, Alembic 1.20 | Next `/mobua-swe:setup` | Research and pin them in `docs/standards.md` |
+
 ## Historical pending-ticket map
 
 This table maps **old responsibilities**, not file rename detection. Completed 01 and 02
