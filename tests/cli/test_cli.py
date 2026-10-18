@@ -15,6 +15,7 @@ from typer.testing import CliRunner, Result
 
 from news.cli.main import app
 from news.service.db import create_engine_for
+from news.service.manifest import parse_manifest
 from news.service.models import (
     Base,
     Channel,
@@ -24,7 +25,7 @@ from news.service.models import (
     PluginRevision,
     Reader,
 )
-from tests.service.factories import URL_PLUGIN_MANIFEST
+from tests.service.factories import URL_PLUGIN_MANIFEST, a_plugin_revision
 
 runner = CliRunner()
 
@@ -91,34 +92,30 @@ def log_lines(path: Path) -> list[dict[str, Any]]:
 
 
 def setup_channel(database_url: str, plugin_files: tuple[Path, Path]) -> tuple[str, str, str]:
-    manifest, code = plugin_files
+    manifest, _code = plugin_files
     reader = created_id(news(database_url, "reader", "create", "Ada"))
-    plugin_revision = created_id(
-        news(
-            database_url,
-            "plugin",
-            "create",
-            "--reader",
-            reader,
-            "--manifest",
-            str(manifest),
-            "--code",
-            str(code),
-        )
-    )
+    # A legacy implementation fixture keeps Binding-schema tests independent of the
+    # future promotion surface. Creation now initializes a starter instead of importing code.
+    with open_session(database_url) as session:
+        owner = session.get_one(Reader, uuid.UUID(reader))
+        plugin_revision = str(a_plugin_revision(session, owner, manifest.read_text()).id)
+        session.commit()
     channel = created_id(news(database_url, "channel", "create", "--reader", reader, "Local"))
     return reader, plugin_revision, channel
 
 
-def test_plugin_is_created_from_a_manifest_and_code_files(
-    database_url: str, plugin_files: tuple[Path, Path]
-) -> None:
-    _, plugin_revision, _ = setup_channel(database_url, plugin_files)
+def test_plugin_is_created_with_a_valid_starter(database_url: str) -> None:
+    reader = created_id(news(database_url, "reader", "create", "Ada"))
+    result = news(database_url, "plugin", "create", "--reader", reader, "rss")
+    assert result.exit_code == 0, result.output
+    plugin_revision = json.loads(result.stdout)["revision_id"]
 
     with open_session(database_url) as session:
         revision = session.get_one(PluginRevision, uuid.UUID(plugin_revision))
-        assert revision.code == {"main.py": "print('hi')\n"}
-        assert revision.manifest == URL_PLUGIN_MANIFEST
+        assert parse_manifest(revision.manifest).name == "rss"
+        assert parse_manifest(revision.manifest).command == "python main.py"
+        assert "main.py" in revision.code
+        assert revision.number == 1
 
 
 def test_binding_with_valid_config_creates_a_channel_revision(
@@ -224,14 +221,8 @@ def test_config_that_is_not_a_json_object_is_a_usage_error(
     assert "must be a JSON object" in result.stderr
 
 
-def test_invalid_manifest_reports_field_errors(
-    database_url: str, tmp_path: Path, log_file: Path
-) -> None:
+def test_invalid_plugin_name_reports_field_errors(database_url: str, log_file: Path) -> None:
     reader = created_id(news(database_url, "reader", "create", "Ada"))
-    manifest = tmp_path / "bad.toml"
-    manifest.write_text('name = "x"\ncommand = "run"\ntimeout = 0\n[config_schema]\n')
-    code = tmp_path / "main.py"
-    code.write_text("")
 
     result = news(
         database_url,
@@ -239,14 +230,11 @@ def test_invalid_manifest_reports_field_errors(
         "create",
         "--reader",
         reader,
-        "--manifest",
-        str(manifest),
-        "--code",
-        str(code),
+        " ",
     )
 
     assert result.exit_code == 1
-    assert "timeout:" in result.stderr
+    assert "name:" in result.stderr
     assert result.stderr.splitlines()[-1] == f"Logged to {log_file}."
 
 
@@ -422,9 +410,8 @@ def test_creating_a_channel_for_an_unknown_reader_is_reported_without_a_tracebac
 
 
 def test_creating_a_plugin_for_an_unknown_reader_is_reported_without_a_traceback(
-    database_url: str, plugin_files: tuple[Path, Path], log_file: Path
+    database_url: str, log_file: Path
 ) -> None:
-    manifest, code = plugin_files
     unknown = str(uuid.uuid7())
 
     result = news(
@@ -433,10 +420,7 @@ def test_creating_a_plugin_for_an_unknown_reader_is_reported_without_a_traceback
         "create",
         "--reader",
         unknown,
-        "--manifest",
-        str(manifest),
-        "--code",
-        str(code),
+        "starter",
     )
 
     assert result.exit_code == 1
@@ -565,12 +549,11 @@ def writing_command(
     command: str, ids: tuple[str, str, str], plugin_files: tuple[Path, Path]
 ) -> list[str]:
     reader, plugin_revision, channel = ids
-    manifest, code = plugin_files
     return {
         "reader": ["reader", "create", "Ada"],
         "plugin": [
             *["plugin", "create", "--reader", reader],
-            *["--manifest", str(manifest), "--code", str(code)],
+            "starter",
         ],
         "channel": ["channel", "create", "--reader", reader, "Local"],
         "bind": [

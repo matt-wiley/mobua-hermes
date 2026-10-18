@@ -1,7 +1,7 @@
 ---
 id: design-consistency-pass-03
 title: "Reader Plugin starter, Draft workspaces, and compatible migration"
-status: todo
+status: done
 blocked_by: [design-consistency-pass-01]
 external: null
 ---
@@ -18,7 +18,7 @@ AC-60, AC-61, AC-62, AC-63, AC-64
 - Pure core: same-Reader/same-Plugin parent eligibility, expected-version comparisons, workspace file selection.
 - Edges: a new portable Alembic migration, starter assets, service-owned flushes with surface-owned commits, Typer commands, typed FastAPI routes, workspace export/import.
 - Attach tests to real migrated databases and CLI/API transactions. Preserve completed migrations and existing Revision ids/contents/numbers/current pointers/Bindings; do not invent legacy ancestry.
-- Store enough immutable Revision ancestry for later promotion; multiple Drafts share a parent. Export includes an expected-version marker outside Plugin implementation files. Save replaces the saved file set, so removed local code files are removed from the Draft.
+- Store enough immutable Revision ancestry for later promotion; multiple Drafts share a parent. Export includes an expected-version marker outside Plugin implementation files. Save replaces the saved Manifest and code. Amended by D-70 / ADR 0026: the workspace holds only `manifest.toml` and `main.py`, other files are ignored, and removing `main.py` saves empty code.
 - Draft/version metadata is excluded from exported runnable code; filenames remain within the workspace and run directory. A file-read/export failure reports an actionable error rather than silently saving partial contents.
 
 ## Observability
@@ -41,3 +41,10 @@ AC-60, AC-61, AC-62, AC-63, AC-64
 - Promotion, dependency validation, Revision selection and immutable-delete enforcement (04).
 - Subprocess Test Run endpoint/command (15-16); no inert endpoint pretending to execute tests.
 - Built-in initial installation or Eject (07-08), frontend screens, external tracker writes.
+
+## Implementation evidence
+
+[Evidence](../evidence/03.md) records red-first slices, the AC-60–64 test mapping, commits,
+and final gates (290 tests passing). [Workspace usage](../../../plugin-drafts.md) describes
+the new named-starter creation interface and CLI/API editing. Independent review and
+deployment verification remain separate.

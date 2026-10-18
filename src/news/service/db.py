@@ -8,7 +8,9 @@ from sqlalchemy import Engine, create_engine, event
 
 
 def create_engine_for(url: str) -> Engine:
-    engine = create_engine(url)
+    # A database error may reach the CLI traceback log; bound values include saved source
+    # and credentials, so SQLAlchemy must omit parameters from its exception strings.
+    engine = create_engine(url, hide_parameters=True)
     if engine.dialect.name == "sqlite":
         event.listen(engine, "connect", _configure_sqlite_connection)
     return engine

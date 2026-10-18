@@ -27,5 +27,6 @@ Decisions that are hard to reverse, surprising without context, and a real trade
 | [0021](0021-channel-models.md) | Channels configure named Channel Models; Plugins reach LLMs only through them | Accepted | 0024 |
 | [0022](0022-plugin-runtimes-and-pinned-inline-dependencies.md) | v1 Plugins run on Python or shell, with pinned inline dependencies run by uv | Accepted |  |
 | [0023](0023-llm-usage-budgeted-recorded-attributed.md) | LLM usage is budgeted, recorded, and attributed | Accepted | 0024 |
-| [0024](0024-plugin-drafts-and-permanent-revision-history.md) | Plugins have disposable Drafts and permanent Revision trees | Accepted | 0025 |
+| [0024](0024-plugin-drafts-and-permanent-revision-history.md) | Plugins have disposable Drafts and permanent Revision trees | Accepted | 0025, 0026 |
 | [0025](0025-built-in-plugin-identities-and-global-lineage.md) | Built-in Plugins preserve global identities and development lineage | Accepted |  |
+| [0026](0026-interim-two-file-plugin-workspaces.md) | Plugin workspaces hold a Manifest and one Python file, for now | Accepted |  |

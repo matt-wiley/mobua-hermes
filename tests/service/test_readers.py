@@ -9,7 +9,7 @@ from news.service.channels import create_channel
 from news.service.models import Channel, ChannelRevision, Plugin, PluginRevision
 from news.service.plugins import create_plugin
 from news.service.readers import ReaderNotFound, require_reader
-from tests.service.factories import URL_PLUGIN_MANIFEST, a_reader
+from tests.service.factories import a_reader
 
 
 def row_count(session: Session, model: type[object]) -> int:
@@ -42,7 +42,7 @@ def test_a_plugin_for_an_unknown_reader_is_rejected_and_nothing_is_written(
     unknown = uuid.uuid7()
 
     with capture_logs() as logs, pytest.raises(ReaderNotFound):
-        create_plugin(session, unknown, URL_PLUGIN_MANIFEST, {"main.py": ""})
+        create_plugin(session, unknown, "starter")
 
     assert not session.new
     assert row_count(session, Plugin) == 0

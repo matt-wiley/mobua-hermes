@@ -4,15 +4,42 @@ This is the existing 21-ticket stream, amended after the confirmed
 [Plugin drafts interview](../../plugin-drafts/grill.md). The contract is the existing
 [spec](../spec.md); no separate Plugin drafts spec or ticket set is required.
 
-Tickets 01–02 are complete and unchanged. Pending tickets 03–21 were rewritten and
+Tickets 01–02 are complete and unchanged. Tickets 03–21 were rewritten and
 renumbered on 2026-10-17. Completed reports and evidence still use the original pending
 numbers; use the historical map below when reading them. This plan does not claim the
 amended spec is code complete.
 
+Ticket 03 is implemented; its [evidence](../evidence/03.md) records the starter, migration,
+saved Draft services, workspaces, and CLI/API gates. Independent review remains separate.
+
+## PR groups
+
+Each group ships as its own branch and pull request. Do not start a group's tickets on
+an earlier group's branch. Branch the next group from the previous group's branch while
+that PR is still open (a stacked PR), or from `main` once it has merged. Tickets within a
+group still follow the ticket workflow and commit individually. Group order is the
+execution order. Two tickets move out of numeric order: 21 runs right after 04, and 09
+runs right before 13. Both moves respect `blocked_by`.
+
+| Group | Theme | Tickets | Delivered value |
+|---|---|---|---|
+| 1 | Foundation | 01, 02, 03 + [review-followups-01](../../review-followups-01/spec.md) | Revisioned data model, encrypted credentials, Draft workspaces |
+| 2 | Draft lifecycle and CI | 04, 21 | Promotion and permanent Revision history; CI and Postgres gates for all later groups |
+| 3 | Plugin runtime | 05, 06 | Hardened, resource-limited Plugin process; manual Collection |
+| 4 | Built-in Plugins | 07, 08 | Initial RSS installation, Eject, explicit Binding upgrades |
+| 5 | LLM Gateway | 10, 11, 12 | Model calls, scoped tokens, call records and metrics |
+| 6 | Budgets | 09, 13, 14 | Cadences, Reader time zone, retention, daily budgets and their settings |
+| 7 | Draft testing | 15, 16 | Ephemeral Draft Test Runs and cancellation |
+| 8 | Publishing | 17, 18 | Articles with Model Attribution, citation retries, budget failures |
+| 9 | Automated operation | 19, 20 | Scheduler, purge, periodic Model Health, end-to-end smoke tests |
+
+Group 1 was built on a single branch before this rule existed. It was split into four
+stacked PRs: 01 with review-followups-01; 02; the docs-only plan revision; and 03.
+
 ## Recommended execution order and criterion coverage
 
-Run 03 next, then follow increasing ticket number for a workable serial implementation
-order. Each implementation starts in a fresh context using this spec and its ticket.
+Run 04 next, then follow the PR group order above. Each implementation starts in a
+fresh context using this spec and its ticket.
 The dependency column records actual prerequisites, rather than forcing independent
 work into an artificial serial chain.
 
@@ -20,7 +47,7 @@ work into an artificial serial chain.
 |---|---|---|---|---|
 | [01](01-scaffold-and-revisioned-data-model.md) | Scaffold the core module and the revisioned Channel/Plugin data model | done | — | AC-1, AC-5, AC-53 |
 | [02](02-encrypted-credentials.md) | Envelope-encrypted Secrets and LLM Provider credentials | done | 01 | AC-23 |
-| [03](03-draft-workspaces-and-compatible-migration.md) | Reader Plugin starter, Draft workspaces, and compatible migration | todo | 01 | AC-60, AC-61, AC-62, AC-63, AC-64 |
+| [03](03-draft-workspaces-and-compatible-migration.md) | Reader Plugin starter, Draft workspaces, and compatible migration | done | 01 | AC-60, AC-61, AC-62, AC-63, AC-64 |
 | [04](04-promotion-and-permanent-revision-history.md) | Promote Drafts and select permanent Revision history | todo | 03 | AC-49, AC-65, AC-66, AC-67, AC-68, AC-69, AC-81 |
 | [05](05-plugin-process-runner-and-manual-collection.md) | Hardened Plugin process runner and manual Collection | todo | 02, 04 | AC-11, AC-12, AC-14, AC-15, AC-16, AC-23 |
 | [06](06-plugin-resource-limits-and-pinned-runtime.md) | Plugin resource limits and pinned Python runtime | todo | 05 | AC-13, AC-50 |
@@ -47,9 +74,10 @@ storage/logging portion.
 
 **Dependency check:** no cycles or missing targets. Numeric order 01 → 02 → 03 → 04 → 05 →
 06 → 07 → 08 → 09 → 10 → 11 → 12 → 13 → 14 → 15 → 16 → 17 → 18 → 19 → 20 → 21
-is a valid topological order. Currently 03 and 09 are ready because their prerequisites are
-complete; 03 is the recommended next ticket. Ticket 21 can run after 04 independently
-of later runtime/scheduler work and can be brought forward to establish CI earlier.
+is a valid topological order, and so is the PR group order 01 → 02 → 03 → 04 → 21 → 05 →
+06 → 07 → 08 → 10 → 11 → 12 → 09 → 13 → 14 → 15 → 16 → 17 → 18 → 19 → 20. Currently 04
+and 09 are ready because their prerequisites are complete; 04 is the recommended next
+ticket.
 
 ## Delivery stages and dependency splits
 

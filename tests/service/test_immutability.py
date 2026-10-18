@@ -105,7 +105,7 @@ def test_repointing_a_binding_through_its_relationship_is_rejected(
     """The foreign key changes only during the flush, so the relationship itself is checked."""
     plugin_revision, channel = a_bound_channel(session)
     assert plugin_revision.reader_id is not None
-    other = create_plugin(session, plugin_revision.reader_id, URL_PLUGIN_MANIFEST, {})
+    other = create_plugin(session, plugin_revision.reader_id, "other")
     session.commit()
     binding = the_current_binding(plugin_revision, channel)
 
@@ -128,7 +128,7 @@ def test_setting_an_attribute_to_its_current_value_is_not_a_change(session: Sess
 
 def test_a_row_still_pending_insert_can_be_changed_before_it_is_flushed(session: Session) -> None:
     reader = a_reader(session)
-    revision = create_plugin(session, reader.id, URL_PLUGIN_MANIFEST, {"main.py": ""})
+    revision = create_plugin(session, reader.id, "starter")
     session.commit()
     new_revision = PluginRevision(
         id=uuid.uuid7(),
@@ -174,7 +174,7 @@ def test_a_plugins_current_revision_can_be_moved_to_an_existing_revision(
     engine: Engine, session: Session
 ) -> None:
     reader = a_reader(session)
-    first = create_plugin(session, reader.id, URL_PLUGIN_MANIFEST, {"main.py": ""})
+    first = create_plugin(session, reader.id, "starter")
     plugin = session.get_one(Plugin, first.plugin_id)
     second = PluginRevision(
         id=uuid.uuid7(),
