@@ -142,6 +142,16 @@ tests and their exclusion before production changes are disclosed in the evidenc
 This unchanged limitation is separate from the introduced boundary regression and
 is not charged as a new finding against this repair.
 
+## Follow-up status (2026-10-18)
+
+The block-boundary major was subsequently repaired in `3a2f8d7`, following failing
+regressions committed in `c7d0a1c`. The repair uses Markdown block source ranges while
+retaining raw ADR-row validation. All required local gates pass, including 511 full
+SQLite tests and 85 focused ADR tests. See the
+[fix report](../fix-adr-index-block-boundaries/report.md) for evidence, the authorized
+dependency scope change and remaining verification. This report's verdict remains the
+independent assessment of `a3709f1`; the subsequent repair awaits independent review.
+
 ## Not verified
 
 Code complete is not deployment verified. This review did **not** verify:
