@@ -8,10 +8,11 @@
 
 ## Verdict
 
-**NOT CODE COMPLETE for the requested two-finding remediation**: the parser defect is fixed
-and all local gates pass, but the historical AC-59 test-first violation remains unresolved.
-This narrow parser repair has red-first evidence and is ready for independent review with
+**Both major findings addressed**: the parser defect is fixed and all local gates pass;
+the user accepted the historical AC-59 test-first exception on 2026-10-18. This narrow parser
+repair has red-first evidence and is ready for independent review with
 `/mobua-swe:code-review` in a fresh context. No independent review of this repair is claimed.
+The original ticket review verdict is not upgraded by this documentation update.
 
 ## Findings and disposition
 
@@ -20,12 +21,15 @@ This narrow parser repair has red-first evidence and is ready for independent re
   the actual column names (`#`, `Decision`, `Status`, `Amended by`). Other first rows reach
   the existing duplicate, field and malformed-row checks. Public interfaces are unchanged;
   one source file changed, with no new dependencies, configuration or migrations.
-- **Historical evidence major remains open.** Ticket 21 evidence accurately records that the
+- **Historical evidence major closed by one-time user exception (2026-10-18).** Ticket 21
+  evidence accurately records that the
   CI workflow preceded its contract test. A new run or code change cannot repair that order.
   The existing mutation run remains useful behavioral evidence, and `21746bf` includes tests
   with implementation, but neither establishes test-first development. The original
-  disclosure is preserved. There is no recorded user override of the strict TDD requirement;
-  requesting this fix is not treated as acceptance of that exception. No workflow rewrite,
+  disclosure is preserved. The user explicitly accepted this particular exception after
+  the repair was completed. See [the exception record](../design-consistency-pass/evidence/21.md#accepted-exception-ac-59-test-first-order-2026-10-18)
+  for the authorization, scope and limits. This applies only to the AC-59 workflow/test
+  ordering in `21746bf`; all other TDD requirements remain in force. No workflow rewrite,
   rewritten history or retrospective claim of compliance was introduced.
 
 ## Reproduction and criteria evidence
@@ -95,7 +99,8 @@ requires diagnostic output rather than new app events or metrics.
 Code complete is not deployment verified. This fix has not had an independent review, and
 hosted CI/deployment execution is unobserved. Postgres, workflow YAML and application database
 behavior are unchanged; the preceding review's 283-test Postgres result is historical
-validation, not a new run for this repair. The AC-59 historical TDD exception remains open.
+validation, not a new run for this repair. The accepted AC-59 historical TDD exception does
+not waive independent review or hosted/deployment verification.
 
 ## Deployment verification checklist
 

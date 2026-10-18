@@ -41,7 +41,7 @@ No substantive findings. ADR parsing/comparison is pure, filesystem effects stay
   - Source: baseline standards §3 and the TDD cycle require “No production code without a failing test first”; code-complete item 2 requires red-first evidence for each criterion.
   - The evidence honestly states that the workflow YAML preceded its contract test. The subsequent mutation run demonstrates meaningful missing-behavior failures, but cannot establish historical test-first order. This is a process/evidence failure, not a claim that the workflow lacks tests or a recorded failing run.
   - Commit `21746bf` includes the workflow and its tests together, satisfying the separate history check that tests land before or with implementation.
-  - Resolution: retain the accurate disclosure. No retrospective run or rewritten evidence can change the chronology. Under the invoked workflow this remains an exception requiring explicit user acceptance before it can be treated as satisfied; this review does not grant that exception. Future corrective slices must use test-first order.
+  - Resolution at review: retain the accurate disclosure; no retrospective run can change the chronology. Subsequently closed by explicit user acceptance on 2026-10-18, limited to the historical AC-59 workflow/test ordering in `21746bf`. See the accepted-exception record in `evidence/21.md`. Future corrective slices must use test-first order.
 
 ## Criteria evidence
 
@@ -90,9 +90,13 @@ was subsequently repaired by `f4af4b7`, after failing regressions were committed
 typecheck, lint, formatting, import boundaries and the current ADR check also pass.
 See [the fix report](../fix-adr-index-first-row/report.md) for red/green evidence.
 
-The historical AC-59 test-first finding remains open. Its original disclosure is preserved,
-and no user override or independent review of the repair is claimed. The overall ticket
-therefore remains **NOT CODE COMPLETE** under the strict workflow.
+The user explicitly accepted the historical AC-59 test-first exception on 2026-10-18. See
+[the exception record](evidence/21.md#accepted-exception-ac-59-test-first-order-2026-10-18)
+for the authorization, scope and limits. The original disclosure is preserved, and both
+major findings are now addressed: the parser defect by repair, and the historical process
+finding by this one-time acceptance. The verdict above remains the original review result
+for `45b8d93`; independent review of the parser repair is still pending. This documentation
+update does not claim a new CODE COMPLETE verdict or hosted/deployment verification.
 
 ## Not verified
 
