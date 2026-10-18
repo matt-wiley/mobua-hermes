@@ -1,116 +1,109 @@
 # Code-complete report: Design consistency pass (ticket 21)
 
-- **Covers:** `c8298de436569a43bac4af48bdc2deaedb568498..45b8d93250dfd809dbfa744bcab1f6e9a1998c61` on branch `feat/docs-postgres-ci`.
-- **Base selection:** this is the ticket 21 stacked branch. Its parent, `feat/draft-promotion-and-ci`, ends at `c8298de`; the range includes the shipping-plan update `9b0abb6` and all four ticket 21 commits. Ticket 04 implementation is inherited and is not re-reviewed as new scope.
+- **Covers:** `c8298de436569a43bac4af48bdc2deaedb568498..9de31c8b05b27b199edd70540c66d23fdf24efb2` on branch `feat/docs-postgres-ci`.
+- **Base selection:** ticket 21 is stacked on `feat/draft-promotion-and-ci` at `c8298de`. This range includes the shipping-plan update, ticket 21 implementation, parser repair, and accepted-exception documentation. Ticket 04 implementation is inherited; only its explicit Postgres isolation/race carry-over is reviewed here.
 - **Spec:** `docs/specs/design-consistency-pass/spec.md`
-- **Tickets:** `design-consistency-pass-21`, local status `done`; AC-55, AC-56, AC-58, AC-59 and ticket 04's Postgres isolation/race carry-over. The status is not changed by this review.
+- **Tickets:** `design-consistency-pass-21`, local status `done`; AC-55, AC-56, AC-58, AC-59 and the Postgres carry-over. This review does not change ticket status.
 - **Sync:** n/a: `external: null`; no external tracker writes.
 - **Date:** 2026-10-18.
-- **Method:** three independent, fresh-context reviewers checked Standards, Spec, and Code-complete evidence. The parent independently ran Postgres, actionlint, the real ADR checker, and the reported parser reproduction. This replaces the earlier ticket 04 report as required by the review workflow; ticket 04 evidence and its separate follow-up reports remain in the repository.
+- **Method:** three independent, fresh-context reviewers checked Standards, Spec, and Code-complete evidence without editing files. The parent independently ran the Postgres gate, actionlint, the real ADR checker, and the new parser reproduction. This report replaces the earlier review of `45b8d93`; implementation and repair evidence remain in their existing files.
 
 ## Verdict
 
-**NOT CODE COMPLETE**: AC-56 has a confirmed false negative, and AC-59's disclosed retrospective red run does not satisfy the workflow's strict test-first requirement. All executed green gates pass.
+**NOT CODE COMPLETE**: AC-56 still permits a duplicate ADR index entry to escape validation when its table row omits the leading pipe. Standards and Code-complete evidence reviews pass; Spec review fails. All executed green gates pass.
 
 ## Findings
 
-No blockers. Two major findings remain.
+No blockers. One major finding remains.
 
 ### Standards (PASS)
 
-No substantive findings. ADR parsing/comparison is pure, filesystem effects stay at the script edge, and the Postgres isolation pin and fixture changes fit the ticket's scope. Installed core dependency majors match the standards snapshot; the historical test count in `docs/mobua-swe.md` does not make the commands or stack stale. The test-first exception is recorded under evidence below rather than duplicated here.
+No findings. Parsing/comparison stays pure and filesystem I/O stays at the script edge. The Postgres isolation pin, portable test fixtures, and CI changes fit the ticket. Installed core stack majors match the standards snapshot; its historical test count does not make the configured commands stale. The accepted AC-59 historical test-order exception remains closed.
 
 ### Spec (FAIL)
 
-- **[major] `scripts/check_adrs.py:172` — the first index entry can escape validation.**
-  - Source: AC-56 requires that the index “lists every ADR file exactly once, with matching title, status, and Amended-by values, and exits non-zero otherwise.”
-  - `_table_rows` always discards the first pipe-delimited line, without checking that it is the table header. If the header is replaced with an ADR entry, that entry is invisible to counting and field validation. An index containing the same ADR entry in that position and in the body passes.
-  - Reproduction against the reviewed code: for `0001-use-sqlite.md` with matching title/status/date, use the index below. `check(files, index)` returns `[]`.
+- **[major] `scripts/check_adrs.py:171` — valid table rows without a leading pipe escape validation.**
+  - **Source:** AC-56 requires the index to list “every ADR file exactly once, with matching title, status, and Amended-by values, and exits non-zero otherwise.”
+  - `_table_rows` selects only lines whose stripped text starts with `|`. Markdown table data rows can omit the outer pipes, including in a table whose other rows have them. This is valid [GitHub Flavored Markdown table syntax, example 199](https://github.github.com/gfm/#example-199).
+  - Appending the row below directly after the existing table rows creates a second ADR 0001 entry. The checker ignores it, returns no problems, and the filesystem command reports success. Thus the docs CI job also accepts the duplicate.
 
     ```markdown
-    | [0001](0001-use-sqlite.md) | Use SQLite | Accepted | |
-    |---|---|---|---|
-    | [0001](0001-use-sqlite.md) | Use SQLite | Accepted | |
+    [0001](0001-channels-write-articles.md) | Channels write their own Articles | Accepted |  |
     ```
 
-  - Fix in ticket 21 through `/mobua-swe:fix`: recognize or validate the header explicitly, validate/count every actual ADR row, and add a failing regression for a missing/replaced header with a duplicate or incorrect first entry. Keep the existing exact diagnostic and CLI exit assertions.
+  - **Independent reproduction:** copy the real 26 ADRs and index to a temporary directory, append that duplicate without its leading pipe, then call `main([directory])`. Observed: `26 ADRs and index are consistent: <temporary directory>`, return `0`. The repository files were not modified. Both the parent and Spec reviewer also independently reproduced `check(...) == []` using synthetic ADRs.
+  - **Fix:** use `/mobua-swe:fix` for ticket 21. Recognize table rows with optional outer pipes, or explicitly reject unhandled ADR rows rather than silently ignoring them. Add failing pure-check and filesystem regressions that assert the duplicate diagnostic, nonzero exit, and absence of a success summary. Preserve the existing first-row repair and all other diagnostics.
 
-### Code-complete evidence (FAIL)
+### Code-complete evidence (PASS)
 
-- **[major] `docs/specs/design-consistency-pass/evidence/21.md:173` — AC-59 was implemented before its test.**
-  - Source: baseline standards §3 and the TDD cycle require “No production code without a failing test first”; code-complete item 2 requires red-first evidence for each criterion.
-  - The evidence honestly states that the workflow YAML preceded its contract test. The subsequent mutation run demonstrates meaningful missing-behavior failures, but cannot establish historical test-first order. This is a process/evidence failure, not a claim that the workflow lacks tests or a recorded failing run.
-  - Commit `21746bf` includes the workflow and its tests together, satisfying the separate history check that tests land before or with implementation.
-  - Resolution at review: retain the accurate disclosure; no retrospective run can change the chronology. Subsequently closed by explicit user acceptance on 2026-10-18, limited to the historical AC-59 workflow/test ordering in `21746bf`. See the accepted-exception record in `evidence/21.md`. Future corrective slices must use test-first order.
+No additional evidence/process findings. The missing behavior and regression coverage above prevent aggregate code completion despite this axis passing its history, recorded evidence, gate, and test-fidelity checks.
+
+- The original AC-55/56 failing run and AC-58 backend/isolation failures remain recorded in `evidence/21.md`.
+- For the first-row repair, history confirms tests-only `eac2b2e` precedes production-only `f4af4b7`. The evidence reviewer loaded the historical parser in memory and independently reproduced **8 failed, 39 passed in 0.10s**, for missing validation and diagnostics. All 47 current checker cases pass. The earlier first-row defect is repaired for its tested cases; the new optional-pipe defect above is distinct.
+- AC-59's retrospective mutation run does not establish historical test-first order. The user's explicit, one-time acceptance is recorded in [ticket evidence](evidence/21.md#accepted-exception-ac-59-test-first-order-2026-10-18) and remains limited to the workflow/test ordering in `21746bf`. It waives no functional criterion, future TDD requirement, independent review, or hosted/deployment verification.
+- No tests were deleted, weakened, skipped, or marked xfail. The commit-failure assertion was strengthened to `IntegrityError`. SQLite-specific PRAGMA assertions still run against an explicit SQLite fixture.
+- Parser tests use synthetic inputs without mocks; filesystem tests use real temporary directories; database tests use real migrated connections, deferred constraints, and concurrent transactions. Each new boundary has appropriate integration coverage for the implemented scenarios.
 
 ## Criteria evidence
 
-The full spec spans later tickets. This review checks only ticket 21's assigned criteria and its explicit carry-over.
+Only ticket 21's assigned criteria and explicit carry-over are assessed; later tickets in the full spec are not part of this verdict.
 
-| Criterion | Tests / evidence | Happy | Failure | Boundary | Edge | Red-first | Green |
+| Criterion | Actual tests / evidence inspected | Happy | Failure | Boundary | Edge | Red-first | Green |
 |---|---|---|---|---|---|---|---|
-| AC-55 | `tests/scripts/test_check_adrs.py`: consistent ADRs, missing/empty/duplicate metadata, malformed dates, reciprocal amendments in both directions, unknown targets, malformed amendment lists, real ADRs | yes | yes | empty ADR set; header/body separation | multiple amendments; deterministic diagnostics | recorded 38 failing cases against missing implementation | yes |
-| AC-56 | Same file: missing/duplicate/extra rows, wrong links/titles/status/amendments, malformed cells, missing index; `test_the_script_reads_a_directory_and_exits_nonzero_on_problems` checks exact stderr and return code | yes | partial: first-row bypass above | empty index; missing directory/index | all discrepancies reported together | same recorded checker red run | existing tests pass; review probe exposes gap |
-| AC-58 | `test_the_engine_fixture_uses_the_configured_database`; `tests/service` through migrated shared fixtures; `test_migrated_schema_matches_the_models`, scope tests and `test_migration_downgrades_to_an_empty_database` | both backends | real repository rejection/rollback tests; incompatible PRAGMA probe recorded | fresh database per test; schema/scope boundaries | template migration and cleanup | backend mismatch and initial Postgres failures recorded | 283 Postgres tests; 464 SQLite tests |
-| AC-59 | `tests/test_ci_workflow.py`: `test_it_runs_on_every_pull_request_and_every_push_to_main`, `test_each_core_gate_runs_in_its_own_job`, pinned Postgres job, docs command, full-SHA Actions, `test_no_step_or_job_is_allowed_to_fail` | local workflow contract | recorded mutation removes jobs/unpins Action; standard Actions failure propagation inspected | PR and main triggers; gate-command contract | pinned image/actions; independent jobs | retrospective only; exception above | 6 contract cases; actionlint clean; hosted CI unverified |
-| Ticket 04 carry-over | `test_connections_run_at_the_isolation_level_the_promotion_claim_needs`; four race tests in `test_promotion.py`, including `test_a_promotion_overlapping_an_uncommitted_sibling_promotion_waits_then_conflicts` | READ COMMITTED pin | losing promotion gets `stale_current_selection` | second connection waits on uncommitted sibling | SERIALIZABLE database default; winner retained, loser Draft retained, distinct numbers | hostile-default five-failure run recorded | passes on SQLite and Postgres |
+| AC-55 | `tests/scripts/test_check_adrs.py`: consistent metadata, missing/empty/repeated fields, malformed dates/amendments, reciprocal amendments, unknown targets, real ADRs | yes | yes | empty ADR set; metadata/body separation | multiple amendments; deterministic diagnostics | recorded 38-case failing checker run | yes |
+| AC-56 | Same file: missing/duplicate/unknown entries, link/title/status/amendment mismatches, malformed rows, missing index; first-row and filesystem diagnostics/exit tests | yes | **incomplete: optional-pipe duplicate is ignored** | empty/missing index and directory; first entry without a header | header spacing; all discrepancies reported | original checker red; repair red independently reproduced | 47 existing cases pass; review probe confirms defect |
+| AC-58 | `test_the_engine_fixture_uses_the_configured_database`; migrated `tests/service` fixtures; `test_migrated_schema_matches_the_models`, scope assertions, and `test_migration_downgrades_to_an_empty_database` | SQLite and Postgres | real repository rejection/rollback cases; recorded incompatible PRAGMA probe | isolated databases; migrated schema/scope | template cloning and cleanup | recorded backend mismatch and initial Postgres failures | 283 Postgres gate tests; 473 full SQLite tests |
+| AC-59 | Six `tests/test_ci_workflow.py` cases: PR/main triggers, configured core commands, pinned Postgres service and URL, docs command, SHA pins, failure propagation | yes locally | recorded removed-job/unpinned-action mutation; failure propagation inspected | triggers and gate-command contract | independent jobs; pinned service/actions | historical ordering exception accepted; no claim of compliance | six contracts pass; actionlint clean; hosted behavior unverified |
+| Ticket 04 carry-over | `test_connections_run_at_the_isolation_level_the_promotion_claim_needs`; four promotion races, including `test_a_promotion_overlapping_an_uncommitted_sibling_promotion_waits_then_conflicts` | READ COMMITTED pin | loser gets `stale_current_selection` | overlapping transaction waits | SERIALIZABLE database default; winner current; loser Draft retained; distinct numbers | recorded hostile-default five-failure run | passes on SQLite and Postgres |
 
-Category applicability: numeric input/output ranges are not relevant to workflow configuration. Its boundaries are trigger configuration and gate commands. Fixture configuration rejection for a non-Postgres URL and a deliberately incompatible Postgres construct are recorded manual probes rather than committed regression tests. SQLite-specific PRAGMA and file/lock tests intentionally retain SQLite engines; this is documented and does not replace the migrated Postgres schema/repository run.
+Numeric ranges do not apply to workflow configuration; its boundaries are triggers and gate commands. Non-Postgres fixture URL rejection and the deliberately incompatible Postgres construct are recorded manual probes. Tests that deliberately create SQLite engines retain that backend; the real Postgres gate still exercises migrated repository/schema tests and promotion races. New application log/metric tests are inapplicable because the ticket explicitly requires diagnostic output and CI gate names instead.
 
 ## Gates
 
-Executed independently against `45b8d93`; the subsequent report edit does not alter implementation or tests.
+Executed independently for `9de31c8`; this report is the only subsequent repository edit.
 
 | Gate | Command | Result |
 |---|---|---|
 | Typecheck | `uv run pyright` | pass: 0 errors, warnings, informations |
 | Lint | `uv run ruff check .` | pass |
-| Formatting | `uv run ruff format --check .` | pass: 176 files already formatted |
+| Formatting | `uv run ruff format --check .` | pass: 177 files already formatted |
 | Import boundaries | `uv run lint-imports` | pass: 1 kept, 0 broken |
-| Full SQLite suite | `uv run pytest` | pass: 464 tests, 10.91 s |
-| Postgres repositories/schema | `NEWS_TEST_DATABASE_URL=postgresql+psycopg://postgres:postgres@localhost:55432/postgres uv run pytest tests/service tests/test_test_database.py` | pass: 283 tests, 15.35 s |
+| Full SQLite suite | `uv run pytest` | pass: 473 tests in 14.11 s |
+| Postgres repositories/schema | `NEWS_TEST_DATABASE_URL=postgresql+psycopg://postgres:postgres@localhost:55432/postgres uv run pytest tests/service tests/test_test_database.py` | pass: 283 tests in 20.27 s |
 | ADR consistency | `uv run python -m scripts.check_adrs docs/adr` | pass: 26 ADRs and index consistent |
 | Workflow syntax | `docker run --rm --volume /Users/matt/projects/mobua-hermes:/repo:ro --workdir /repo rhysd/actionlint:1.7.12 .github/workflows/core.yml` | pass: exit 0, no diagnostics |
+| Diff whitespace | `git diff --check c8298de..9de31c8` | pass |
 
-Postgres used a temporary local container with the exact CI image, `postgres:18.6-alpine@sha256:77f585114c32fbca283dc835b0596f4e52b51b4c6662d7810b2f4084f60a1873`, on port 55432. The review stopped and automatically removed it after the run.
+Postgres used a temporary local container on port 55432 with the exact CI image,
+`postgres:18.6-alpine@sha256:77f585114c32fbca283dc835b0596f4e52b51b4c6662d7810b2f4084f60a1873`.
+The container was stopped and automatically removed after the run. Postgres test databases
+default to SERIALIZABLE, proving the engine's READ COMMITTED pin instead of inheriting
+the server default.
 
-No tests were deleted, weakened, skipped, or marked xfail. Implementation commits include their corresponding tests. New pure-core tests use synthetic inputs without mocks; filesystem checks use real temporary directories; database rejection and race tests use real migrated connections and deferred constraints. The implementation evidence records a successful build and a full Postgres suite, but this review independently reran only the required Postgres repository/schema subset.
+The Standards reviewer also passed 55 focused SQLite tests, and the Spec reviewer passed
+86 focused SQLite tests. These green results do not invalidate the independently
+reproduced missing test case.
 
 ## Observability delivered
 
-- The checker prints file/field discrepancies to stderr, returns nonzero on failure, and prints a summary on success. Tests assert the exact error output and return values.
-- CI jobs identify the failing gate: typecheck, lint, SQLite tests, Postgres tests, or docs.
-- No new app events or metrics, as explicitly required by this ticket. Metrics would not add useful runtime measurement to this local consistency check.
-
-## Follow-up status (2026-10-18)
-
-The findings and verdict above describe the reviewed `45b8d93` snapshot. The parser major
-was subsequently repaired by `f4af4b7`, after failing regressions were committed in
-`eac2b2e`. The focused suite now passes 47 cases and the full SQLite suite passes 473;
-typecheck, lint, formatting, import boundaries and the current ADR check also pass.
-See [the fix report](../fix-adr-index-first-row/report.md) for red/green evidence.
-
-The user explicitly accepted the historical AC-59 test-first exception on 2026-10-18. See
-[the exception record](evidence/21.md#accepted-exception-ac-59-test-first-order-2026-10-18)
-for the authorization, scope and limits. The original disclosure is preserved, and both
-major findings are now addressed: the parser defect by repair, and the historical process
-finding by this one-time acceptance. The verdict above remains the original review result
-for `45b8d93`; independent review of the parser repair is still pending. This documentation
-update does not claim a new CODE COMPLETE verdict or hosted/deployment verification.
+- Checker failures print file/field discrepancies to stderr and return nonzero; success prints a summary. Existing filesystem tests assert exact diagnostics and exit results. The optional-pipe case still bypasses this reporting, as described above.
+- CI job names identify the failing gate: typecheck, lint, SQLite tests, Postgres tests, or docs.
+- No new application events or metrics, as specified by ticket 21. Runtime metrics are not appropriate for this local documentation consistency check.
 
 ## Not verified
 
 Code complete is not deployment verified. This review did **not** verify:
 
-- Hosted GitHub Actions execution on `ubuntu-24.04`, including Action execution, service health, PR/main triggering, or a broken index causing a hosted failure.
-- The docs check on a deployed commit, or real runtime behavior with target-environment data and traffic.
-- Branch-protection requirements, web CI, container integration execution in hosted CI, or image publishing; these are outside ticket 21.
-- A full Postgres API/CLI suite in this independent review. The required repository/schema subset and its promotion races passed; the implementation evidence separately records a full Postgres run.
+- Hosted GitHub Actions on `ubuntu-24.04`: Action execution, service health, PR/main triggering, or a deliberately broken index causing a hosted failure.
+- The docs check on a deployed commit or runtime behavior with target-environment data and traffic.
+- A full Postgres API/CLI suite in this review. The required repository/schema subset passed; implementation evidence separately records an earlier full Postgres run.
+- Branch protection, web CI, hosted container integration tests, or image publishing; these are outside ticket 21.
+- A fix for the new optional-pipe finding. This review changes only the report; it does not squash commits or change implementation.
 
 ## Deployment verification checklist
 
 - [ ] On the deployed commit, run `uv run python -m scripts.check_adrs docs/adr`: exit 0 and all ADRs/index consistent.
 - [ ] Open a PR and inspect the hosted `core` run: typecheck, lint, full SQLite suite, pinned Postgres repository/schema tests, and docs all execute and pass; the Postgres service becomes healthy.
-- [ ] Push a commit to `main` through the normal merge process and confirm the same hosted gates execute and pass.
-- [ ] In a test PR, remove an ADR index row or change its status: the hosted `docs` job and overall run fail with the affected file/field; restoring it makes the check pass.
-- [ ] In the target Postgres environment, overlap two sibling promotions: one succeeds and the other waits, then returns 409 `stale_current_selection`; no deadlock or 503, winner current, losing Draft retained, and distinct Revision numbers.
+- [ ] Merge through the normal process and confirm the same hosted gates execute and pass on a push to `main`.
+- [ ] After fixing AC-56, use a test PR to remove an index row, change its status, and append a duplicate table row without a leading pipe: each mutation fails the hosted `docs` job with the affected file/field and no success summary; restoring the index passes.
+- [ ] In the target Postgres environment, overlap two sibling promotions: one succeeds; the other waits, then returns 409 `stale_current_selection`; no deadlock or 503, winner current, losing Draft retained, distinct Revision numbers.
