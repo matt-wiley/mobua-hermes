@@ -218,6 +218,60 @@ def test_an_adr_listed_twice_is_a_problem() -> None:
     assert check(CONSISTENT_FILES, index) == ["README.md: 0002: listed 2 times"]
 
 
+@pytest.mark.parametrize(
+    ("first_row", "problem"),
+    [
+        (
+            a_row(FIRST[0], "Use SQLite", amended_by="0002"),
+            "0001: listed 2 times",
+        ),
+        (a_row("0003-gone.md", "Gone"), "0003: no ADR file"),
+        ("| malformed |", "row: '| malformed |' does not have 4 cells"),
+    ],
+)
+def test_an_entry_replacing_the_header_is_validated(first_row: str, problem: str) -> None:
+    index = CONSISTENT_INDEX.replace("| # | Decision | Status | Amended by |", first_row)
+
+    assert check(CONSISTENT_FILES, index) == [f"README.md: {problem}"]
+
+
+@pytest.mark.parametrize(
+    ("first_row", "problem"),
+    [
+        (
+            a_row(FIRST[0], "Wrong title", amended_by="0002"),
+            "Decision 'Wrong title' does not match title 'Use SQLite'",
+        ),
+        (
+            a_row(FIRST[0], "Use SQLite", status="Proposed", amended_by="0002"),
+            "Status 'Proposed' does not match 'Accepted'",
+        ),
+        (
+            a_row(FIRST[0], "Use SQLite"),
+            "Amended by '' does not match '0002'",
+        ),
+        (
+            a_row("0001-renamed.md", "Use SQLite", amended_by="0002"),
+            f"links to '0001-renamed.md', not {FIRST[0]!r}",
+        ),
+    ],
+)
+def test_the_first_entry_without_a_header_has_its_fields_checked(
+    first_row: str, problem: str
+) -> None:
+    index = f"{first_row}\n|---|---|---|---|\n{a_row(SECOND[0], 'Allow Postgres')}\n"
+
+    assert check(CONSISTENT_FILES, index) == [f"README.md: 0001: {problem}"]
+
+
+def test_a_header_is_recognized_by_its_cells_despite_spacing() -> None:
+    index = CONSISTENT_INDEX.replace(
+        "| # | Decision | Status | Amended by |", "  |#|  Decision |Status| Amended by|  "
+    )
+
+    assert check(CONSISTENT_FILES, index) == []
+
+
 def test_a_row_without_an_adr_file_is_a_problem() -> None:
     index = CONSISTENT_INDEX + a_row("0003-gone.md", "Gone") + "\n"
 
@@ -336,6 +390,22 @@ def test_the_script_ignores_files_that_are_not_markdown(
 
     assert main([str(tmp_path)]) == 0
     capsys.readouterr()
+
+
+def test_the_script_reports_a_duplicate_in_place_of_the_index_header(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    for filename, text in CONSISTENT_FILES.items():
+        (tmp_path / filename).write_text(text)
+    index = CONSISTENT_INDEX.replace(
+        "| # | Decision | Status | Amended by |", a_row(FIRST[0], "Use SQLite", amended_by="0002")
+    )
+    (tmp_path / "README.md").write_text(index)
+
+    assert main([str(tmp_path)]) == 1
+    captured = capsys.readouterr()
+    assert captured.err == f"{tmp_path}/README.md: 0001: listed 2 times\n"
+    assert captured.out == ""
 
 
 def test_the_script_rejects_a_missing_directory(
