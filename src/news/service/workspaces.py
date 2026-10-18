@@ -125,18 +125,7 @@ def read_workspace(
     draft_id: uuid.UUID,
 ) -> Workspace:
     try:
-        _require_directory(directory)
-        marker_path = directory / MARKER
-        _require_file(marker_path)
-        marker = _Marker.model_validate_json(marker_path.read_text(encoding="utf-8"))
-        if (marker.reader_id, marker.plugin_id, marker.draft_id) != (
-            reader_id,
-            plugin_id,
-            draft_id,
-        ):
-            _fail(
-                directory, "read", "version marker belongs to a different Reader, Plugin or Draft"
-            )
+        marker = _read_marker(directory, reader_id, plugin_id, draft_id)
         implementation = directory / IMPLEMENTATION
         _require_directory(implementation)
         if not (implementation / MANIFEST).exists():
@@ -155,6 +144,41 @@ def read_workspace(
         )
     except ValidationError as error:
         _fail(directory, "read", "invalid version marker; export again", error)
+
+
+def read_marker_version(
+    directory: Path,
+    reader_id: uuid.UUID,
+    plugin_id: uuid.UUID,
+    draft_id: uuid.UUID,
+) -> int:
+    """The Draft version the workspace was exported or last saved at; files are not read."""
+    try:
+        return _read_marker(directory, reader_id, plugin_id, draft_id).version
+    except (OSError, UnicodeError) as error:
+        _fail(
+            directory,
+            "read",
+            "cannot read the version marker; check paths, links and permissions",
+            error,
+        )
+    except ValidationError as error:
+        _fail(directory, "read", "invalid version marker; export again", error)
+
+
+def _read_marker(
+    directory: Path,
+    reader_id: uuid.UUID,
+    plugin_id: uuid.UUID,
+    draft_id: uuid.UUID,
+) -> _Marker:
+    _require_directory(directory)
+    marker_path = directory / MARKER
+    _require_file(marker_path)
+    marker = _Marker.model_validate_json(marker_path.read_text(encoding="utf-8"))
+    if (marker.reader_id, marker.plugin_id, marker.draft_id) != (reader_id, plugin_id, draft_id):
+        _fail(directory, "read", "version marker belongs to a different Reader, Plugin or Draft")
+    return marker
 
 
 def advance_marker(directory: Path, workspace: Workspace, version: int) -> None:

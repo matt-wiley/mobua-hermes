@@ -7,6 +7,7 @@ from news.service.credentials import SecretNotFound
 from news.service.drafts import DraftNotFound
 from news.service.encryption import EncryptionError
 from news.service.readers import ReaderNotFound
+from news.service.revision_history import PluginNotFound
 from news.service.validation import ValidationRejected
 from news.service.workspaces import WorkspaceError
 
@@ -18,6 +19,7 @@ EXPECTED_FAILURES = (
     SecretNotFound,
     EncryptionError,
     DraftNotFound,
+    PluginNotFound,
     WorkspaceError,
 )
 

@@ -19,13 +19,26 @@ from news.cli.messages import EXPECTED_FAILURES, expected_failure_lines, unexpec
 from news.service.channels import bind_plugin, create_channel
 from news.service.credentials import save_provider, save_secret
 from news.service.db import create_engine_for, migrate
-from news.service.drafts import create_draft, delete_draft, get_draft, list_drafts, save_draft
+from news.service.drafts import (
+    create_draft,
+    delete_draft,
+    get_draft,
+    list_drafts,
+    promote_draft,
+    save_draft,
+)
 from news.service.keys import generate_master_key, read_master_key
 from news.service.observability import configure_logging
-from news.service.plugin_data import DraftDetails, PluginStarter
+from news.service.plugin_data import DraftDetails, PluginStarter, RevisionDetails
 from news.service.plugins import create_plugin
 from news.service.readers import create_reader
-from news.service.workspaces import advance_marker, export_workspace, read_workspace
+from news.service.revision_history import list_revisions, select_current_revision
+from news.service.workspaces import (
+    advance_marker,
+    export_workspace,
+    read_marker_version,
+    read_workspace,
+)
 
 log = structlog.get_logger(__name__)
 
@@ -85,6 +98,10 @@ app.add_typer(reader_app, name="reader")
 app.add_typer(plugin_app, name="plugin")
 draft_app = typer.Typer(cls=_CommandGroup, no_args_is_help=True, help="Saved Plugin Drafts.")
 plugin_app.add_typer(draft_app, name="draft")
+revision_app = typer.Typer(
+    cls=_CommandGroup, no_args_is_help=True, help="Permanent Plugin Revision history."
+)
+plugin_app.add_typer(revision_app, name="revision")
 app.add_typer(channel_app, name="channel")
 secret_app = typer.Typer(cls=_CommandGroup, no_args_is_help=True, help="Encrypted Source Secrets.")
 provider_app = typer.Typer(cls=_CommandGroup, no_args_is_help=True, help="LLM Providers.")
@@ -302,6 +319,65 @@ def draft_delete(
     with _transaction(ctx) as session:
         delete_draft(session, reader, plugin, draft)
     typer.echo("Deleted Draft.")
+
+
+@draft_app.command("promote")
+def draft_promote(
+    ctx: typer.Context,
+    reader: ReaderOption,
+    plugin: PluginOption,
+    draft: DraftOption,
+    directory: Annotated[
+        Path | None,
+        typer.Option(help="Workspace whose version marker gives the expected Draft version."),
+    ] = None,
+    expected_version: Annotated[
+        int | None, typer.Option(min=1, help="The expected saved Draft version.")
+    ] = None,
+    confirm_current: Annotated[
+        uuid.UUID | None,
+        typer.Option(help="The current Revision this Draft replaces, if not its parent."),
+    ] = None,
+) -> None:
+    """Promote the saved Draft (not unsaved local files) to the current Revision; print it."""
+    with _transaction(ctx) as session:
+        match directory, expected_version:
+            case None, int() as version:
+                pass
+            case Path() as workspace, None:
+                get_draft(session, reader, plugin, draft)
+                version = read_marker_version(workspace, reader, plugin, draft)
+            case _:
+                raise typer.BadParameter("give exactly one of --directory or --expected-version")
+        result = RevisionDetails.model_validate(
+            promote_draft(session, reader, plugin, draft, version, confirm_current)
+        )
+    typer.echo(result.model_dump_json())
+
+
+@revision_app.command("list")
+def revision_list(ctx: typer.Context, reader: ReaderOption, plugin: PluginOption) -> None:
+    """Print the Revision tree and current selection as JSON."""
+    with _transaction(ctx) as session:
+        result = list_revisions(session, reader, plugin)
+    typer.echo(result.model_dump_json())
+
+
+@revision_app.command("select")
+def revision_select(
+    ctx: typer.Context,
+    reader: ReaderOption,
+    plugin: PluginOption,
+    revision: Annotated[uuid.UUID, typer.Option(help="The Revision to make current.")],
+    expected_current: Annotated[
+        uuid.UUID, typer.Option(help="The Revision you expect to be current now.")
+    ],
+) -> None:
+    """Make an existing Revision current; Channel Bindings stay pinned. Print the history."""
+    with _transaction(ctx) as session:
+        select_current_revision(session, reader, plugin, revision, expected_current)
+        result = list_revisions(session, reader, plugin)
+    typer.echo(result.model_dump_json())
 
 
 @channel_app.command("create")
