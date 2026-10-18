@@ -3,7 +3,7 @@ slug: design-consistency-pass
 title: Design consistency pass
 status: implementing
 created: 2026-10-17
-updated: 2026-10-17
+updated: 2026-10-18
 adrs:
   - docs/adr/0018-plugin-bindings-pin-plugin-revisions.md
   - docs/adr/0019-built-in-plugins-are-shared-and-ejectable.md
@@ -67,7 +67,7 @@ It is a delta over the existing ADR design, not a full spec of Collection or Pub
 - D-17: Every ADR carries Status, Date, and two-way Amends/Amended by metadata. (grill 14)
 - D-18: Every record carries a Reader id, except Built-in Plugins and their Revisions and app-wide records with no Reader data. Records that belong to a Channel also carry its Channel id. (ADRs 0007, 0013; grill 15)
 - D-19: The glossary defines Built-in Plugin, Eject, Plugin Binding, Channel Model, Model Health, Model Attribution, Data Key, and Gateway Token. (grill 16)
-- D-20: The ADR index `docs/adr/README.md` is maintained by hand. A CI consistency check is deferred to the first CI setup. (grill 17)
+- D-20: The ADR index `docs/adr/README.md` is maintained by hand. Automated ADR validation was canceled on 2026-10-18; no local or CI checker is required. (grill 17; user cancellation)
 - D-21: ADR 0017 no longer refers to undefined phases. The roadmap is deferred to a roadmap grill. (grill 18)
 - D-22: Authentication is deferred to an auth grill, with its required coverage recorded in the grill. (grill 19)
 - D-23: LLM Provider credentials are encrypted with the Reader's Data Key and decrypted only inside the Gateway, in memory, at call time. They are never passed to Plugin Runs or logged. (ADR 0009, grill 20)
@@ -144,8 +144,8 @@ Plugin design session decides the Plugin file model.
 - Reader-owned Plugin Draft lifecycle, permanent Revision history, stale-version protection, CLI file editing, API surfaces, and ephemeral foreground Test Runs (D-35 through D-70).
 - Gateway accounting: budgets, call records, metrics, Model Health, and Model Attribution.
 - Validation rules on save: Binding config, Channel Models, cadences, Retention Window, and pinned dependencies.
-- A docs consistency check runnable locally (AC-56). D-17, D-19, D-20, and D-21 are already done.
-- Whole-system checks, added in ticket review on 2026-10-17: an end-to-end smoke test (AC-57), repository tests against Postgres (AC-58), and a CI workflow running the core gates and the docs check (AC-59).
+- D-17, D-19, D-20, and D-21 remain documentation conventions maintained by hand.
+- Whole-system checks, added in ticket review on 2026-10-17: an end-to-end smoke test (AC-57), repository tests against Postgres (AC-58), and a CI workflow running the core gates (AC-59).
 
 **Non-goals:**
 - Anything deferred to a named follow-up:
@@ -162,7 +162,8 @@ Plugin design session decides the Plugin file model.
 - Dollar-denominated budgets (ADR 0023).
 - Embedding-based Topic grouping, which needs embeddings in the Gateway.
 - Runtimes other than Python and shell for Plugins (ADR 0022).
-- CI for the web module, and running the container-image integration tests in CI. AC-59 covers the core gates and the docs check only.
+- Automated ADR metadata, reciprocal-amendment, and index checking. This work was canceled on 2026-10-18 because its fragility and maintenance cost outweigh its current value.
+- CI for the web module, and running the container-image integration tests in CI. AC-59 covers the core gates only.
 - Writing the RSS Built-in Plugin or the Publish writing prompt beyond what these criteria require.
 
 ## Acceptance criteria
@@ -245,14 +246,14 @@ Plugin design session decides the Plugin file model.
 - AC-53: A schema test confirms every table has a Reader id column, except Built-in Plugin tables and declared app-wide tables. Every table for Channel-owned records also has a Channel id column.
 - AC-54: Querying Plugins as Reader B through the service layer returns Built-in Plugins and B's own Plugins, never Reader A's.
 
-### Docs consistency
-- AC-55: Every ADR file has `Status:` and `Date:` lines. Every `Amends: X` has a matching `Amended by:` on X, and the reverse.
-- AC-56: A local check script verifies that `docs/adr/README.md` lists every ADR file exactly once, with matching title, status, and Amended-by values, and exits non-zero otherwise.
+### Withdrawn ADR-checking criteria
+- AC-55: Withdrawn on 2026-10-18 with cancellation of automated ADR validation. Metadata and amendment conventions remain contribution guidance maintained by hand.
+- AC-56: Withdrawn on 2026-10-18 with cancellation of the local/CI ADR index checker. The identifier is reserved; later criteria are not renumbered.
 
 ### Whole-system checks
 - AC-57: An end-to-end smoke test runs in the container image with the real Plugin Run launcher, SQLite, the real Gateway with a fake Provider Adapter, and an injected clock. A Channel bound to the RSS Built-in Plugin, reading a local fixture feed, is advanced through one scheduler tick. A real Plugin Run collects News Items into the Feed, then the Publish writes at least one Article into the Inbox. Each Citation matches a fixture Source Reference, the Model Attribution names the fake Model for each LLM step, and there is one call record per LLM step.
 - AC-58: With `NEWS_TEST_DATABASE_URL` set to a Postgres URL, the repository tests and the schema test (AC-53) run against Postgres and pass. With it unset, they run on SQLite.
-- AC-59: A GitHub Actions workflow runs on every pull request and on every push to `main`. It runs core typecheck, lint, the full suite on SQLite, the repository tests against a Postgres service container whose version is pinned in the workflow, and the docs check (AC-56). Any failing step fails the run.
+- AC-59: A GitHub Actions workflow runs on every pull request and on every push to `main`. It runs core typecheck, lint, the full suite on SQLite, and the repository tests against a Postgres service container whose version is pinned in the workflow. Any failing step fails the run. Automated ADR checking is excluded.
 
 ### Reader-owned Draft workspace and Revision lifecycle
 
@@ -362,8 +363,7 @@ Plugin design session decides the Plugin file model.
 - [ ] CLI: set a Channel budget to 1 token and trigger a Publish. Channel Health names the Channel budget, the Provider, and the Model; `gateway_budget_refusals_total{budget="channel"}` incremented; no new Channel Revision was created by the budget change.
 - [ ] CLI: run the Provider test action. Model Health shows each enabled Model as healthy. Break the key and re-test: Model Health shows an auth failure, and Channels using that Provider show a linked Channel Health entry.
 - [ ] Publish an Article and inspect it via the CLI. Its Model Attribution lists each LLM step with Provider and Model id.
-- [ ] Run the docs consistency check (AC-56) on the deployed commit: exit 0.
-- [ ] Open a PR and confirm the core CI workflow runs every step and passes. A branch with a broken ADR index fails the docs-check step.
+- [ ] Open a PR and confirm the four core CI jobs (typecheck, lint, full SQLite suite, Postgres repository/schema tests) run and pass. Confirm the same jobs run on a push to `main`.
 - [ ] CLI/API: create a new Reader Plugin, export/save an invalid Draft, then try promotion. Saving succeeds; promotion reports field errors with unchanged Draft/Revisions/current pointer. Correct/save/promote it: a new permanent Revision becomes current and only that Draft disappears; inspect the assigned safe events in the CLI log or server stdout.
 - [ ] Export a Draft on macOS, open `implementation/` in Finder and run `main.py` once, then edit `main.py` and save. Saving succeeds despite `.DS_Store` and `__pycache__/`, and the saved Draft's code holds only `main.py`. Exporting a Draft saved through the API with an extra code file fails with an actionable error and creates no directory.
 - [ ] Export a Draft, update it through the API, then save/promote the stale workspace version: receive a conflict and observe no overwritten content. Reconcile explicitly. View the Revision tree and select an older Revision; existing Channel Bindings remain unchanged.

@@ -30,6 +30,7 @@ Use Python 3.14+ and uv:
 - `uv run ruff check .` and `uv run ruff format --check .`: check lint and formatting; use `uv run ruff format .` to format.
 - `uv run pyright`: run strict type checking.
 - `uv run lint-imports`: verify architectural import boundaries.
+- `NEWS_TEST_DATABASE_URL=postgresql+psycopg://user:pass@host/db uv run pytest tests/service`: run the repository tests on Postgres. The user needs `CREATEDB`; each test gets its own database.
 
 ## Coding Style & Naming Conventions
 
@@ -37,11 +38,11 @@ Use four-space indentation, 100-character lines, type annotations, `snake_case` 
 
 ## Testing Guidelines
 
-Use pytest with `test_*.py` files and `test_*` functions. Reuse temporary database fixtures, which apply migrations. Add regression tests for changed behavior, including rejection paths and scope boundaries. Warnings fail tests, and markers are strict. No numeric coverage threshold is configured.
+Use pytest with `test_*.py` files and `test_*` functions. Reuse temporary database fixtures, which apply migrations and default to SQLite; set `NEWS_TEST_DATABASE_URL` to run them on Postgres. Add regression tests for changed behavior, including rejection paths and scope boundaries. Warnings fail tests, and markers are strict. No numeric coverage threshold is configured.
 
 ## Commit & Pull Request Guidelines
 
-Recent commits use a scope or ticket prefix, such as `review-followups-01-06: guard immutable revisions`. Write concise, action-oriented subjects. Open an issue before substantial work. Ship each PR group in a spec's tickets README (for example `docs/specs/design-consistency-pass/tickets/README.md`) as its own branch and PR; never accumulate several groups on one branch. Keep PRs focused; explain what changed and why, link the issue or ADR, and report validation. Follow the PR template: update terminology and tests where applicable. Significant design changes require a new or amending ADR and an updated ADR index.
+Recent commits use a scope or ticket prefix, such as `review-followups-01-06: guard immutable revisions`. Write concise, action-oriented subjects. Track work using local ticket files; do not create GitHub issues. Ship each PR group in a spec's tickets README (for example `docs/specs/design-consistency-pass/tickets/README.md`) as its own branch and PR; never accumulate several groups on one branch. Keep PRs focused; explain what changed and why, link the local ticket or ADR, and report validation. Follow the PR template: update terminology and tests where applicable. Significant design changes require a new or amending ADR and an updated ADR index.
 
 ## Security & Configuration
 

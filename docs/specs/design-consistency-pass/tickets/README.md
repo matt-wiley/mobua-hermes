@@ -36,6 +36,10 @@ runs right before 13. Both moves respect `blocked_by`.
 Group 1 was built on a single branch before this rule existed. It was split into four
 stacked PRs: 01 with review-followups-01; 02; the docs-only plan revision; and 03.
 
+Group 2 ships as two stacked PRs: 04 (`feat/draft-promotion-and-ci`), then 21
+(`feat/docs-postgres-ci`, branched from 04's branch). Ticket 21 is large enough to review on
+its own.
+
 ## Recommended execution order and criterion coverage
 
 Run 04 next, then follow the PR group order above. Each implementation starts in a
@@ -65,10 +69,12 @@ work into an artificial serial chain.
 | [18](18-citation-retries-and-publish-budget-failures.md) | Citation retries, Article rejection, and Publish budget exhaustion | todo | 13, 14, 17 | AC-30, AC-40, AC-41 |
 | [19](19-scheduler-purge-and-periodic-model-health.md) | Scheduler, leases, Catch-up, retention purge, and periodic Model Health | todo | 05, 09, 10, 12, 18 | AC-6, AC-32, AC-35, AC-43, AC-44, AC-45 |
 | [20](20-end-to-end-smoke-test.md) | Container smoke tests for scheduled publishing and Draft-to-Collection flow | todo | 07, 08, 16, 18, 19 | AC-57, AC-82 |
-| [21](21-docs-consistency-postgres-and-core-ci.md) | ADR consistency, Postgres repository checks, and core CI | todo | 04 | AC-55, AC-56, AC-58, AC-59 |
+| [21](21-postgres-and-core-ci.md) | Postgres repository checks and core CI | done | 04 | AC-58, AC-59 |
 
-**Coverage:** AC-1 through AC-82 are assigned, with zero uncovered criteria and zero unknown
-criterion references. AC-23 is intentionally shared between completed storage ticket 02
+**Coverage:** the 80 active criteria within AC-1 through AC-82 are assigned, with zero
+uncovered active criteria and zero unknown criterion references. AC-55 and AC-56 were
+withdrawn on 2026-10-18; their identifiers are reserved. AC-23 is intentionally shared
+between completed storage ticket 02
 and pending environment-isolation ticket 05; the ticket-02 report covers only its original
 storage/logging portion.
 
@@ -94,7 +100,7 @@ ticket.
 - **17–20:** safely rendered Publish tracer, citation/budget failures, scheduling and
   periodic health/purge, then container smoke evidence for both scheduled publishing
   and the Draft-to-normal-Collection path.
-- **21:** documentation/portability/CI gates, independently runnable once its stated
+- **21:** portability/CI gates, independently runnable once its stated
   prerequisite is complete.
 
 Exact-pin validation moved out of old runtime ticket 04 into new promotion ticket 04.
@@ -104,8 +110,9 @@ remain with scheduler 19. Test Runs therefore do not wait for Publish or the sch
 
 The following cohesive work was combined to keep the existing ticket count:
 Eject with Binding upgrades (08); Publish with its initial safe rendering boundary (17);
-scheduler with its hourly health job (19); and local ADR checks with Postgres/core CI
-wiring (21). Ticket 04 has additional criteria because atomic promotion/history,
+scheduler with its hourly health job (19); and Postgres portability with core CI
+wiring (21). Automated ADR checking was canceled on 2026-10-18 and removed from ticket 21.
+Ticket 04 has additional criteria because atomic promotion/history,
 exact-pin validation, and their operational logging form one independently verifiable
 Reader action. Ticket 11 similarly covers the scoped call contract and metadata
 Adapter boundary. No horizontal all-models or all-endpoints ticket is introduced.
@@ -115,9 +122,12 @@ Adapter boundary. No horizontal all-models or all-endpoints ticket is introduced
 Ticket 04's review left these open on purpose. Each one is parked where it next matters. See
 [fix-review-minors-04](../../fix-review-minors-04/report.md) for the context.
 
+Ticket 21 settled the isolation level: `create_engine_for` pins READ COMMITTED on Postgres, and
+Postgres test databases default to SERIALIZABLE so the suite proves the pin
+([evidence](../evidence/21.md)).
+
 | Decision | When | Options |
 |---|---|---|
-| Isolation level the promotion claim relies on | Ticket 21 | Pin READ COMMITTED in `create_engine_for`, or keep the documented assumption and prove it on Postgres |
 | Naive `created_at` from SQLite outside `RevisionDetails` | Before ticket 09 | Shared UTC `TypeDecorator` on timestamp columns, or record why projections normalize |
 | Success events (`plugin_draft.promoted`, `.deleted`) logged at flush, before commit | Next grill | Emit after commit at the surfaces, or record flush-time events in the spec/ADR |
 | `plugin_revision.selection_rejected` and `plugin.not_found` not in the spec | Same grill | Amend the spec's Observability list, or fold them into listed events |
@@ -147,9 +157,9 @@ retain their ids, files, statuses, and evidence.
 | 16: scheduler/leases/Catch-up/purge | 19 |
 | 17: Model Health | 10 for call-driven/on-demand health; 19 for hourly listing |
 | 18: Article sanitizer | 17 |
-| 19: local ADR checker | 21 |
+| 19: local ADR checker | Canceled on 2026-10-18; no current owner |
 | 20: container smoke | 20, extended to cover the Draft lifecycle |
-| 21: Postgres/core CI | 21, including its local ADR-check prerequisite |
+| 21: Postgres/core CI | 21 |
 
 Reader Draft work is incorporated into 03–04 and 15–16. Built-in patch/release update
 delivery, installation/rollback policy, and remote/full history remain explicitly deferred.
@@ -186,9 +196,9 @@ The numbers below refer to checklist positions in the amended spec.
 | 5: budget change/refusal/metric/no Channel Revision | 13–14 and 18 |
 | 6: Provider test, Model Health, normal Channel links | 10; periodic listing 19 |
 | 7: Article Model Attribution | 17 |
-| 8: local ADR checker | 21 |
-| 9: PR/main CI gates and broken-index failure | 21 |
-| 10: invalid Draft save, rejection, atomic promotion and safe logs | 03–04 |
+| 8: PR/main application CI gates | 21 |
+| 9: invalid Draft save, rejection, atomic promotion and safe logs | 03–04 |
+| 10: two-file workspace ignores OS/runtime artifacts; unsupported exports fail | 03 |
 | 11: stale workspace conflict and history/current selection | 03–04 and 08 |
 | 12: ephemeral test preview, real budgets/tags, no Channel side effects | 15, integrated by 20 |
 | 13: interrupt/disconnect cleanup and retained incurred usage | 16 |

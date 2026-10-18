@@ -1,12 +1,16 @@
 """AC-53, review-followups-01 AC-1, AC-3: every table declares its scope, and keeps to it."""
 
+from collections.abc import Iterator
+from pathlib import Path
+
+import pytest
 from alembic import command
 from alembic.autogenerate import compare_metadata
 from alembic.migration import MigrationContext
 from sqlalchemy import Engine, inspect, text
 
 from news.service import models
-from news.service.db import alembic_config
+from news.service.db import alembic_config, create_engine_for
 from news.service.models import Base
 from tests.schema_rules import describe_tables, scope_violations
 
@@ -105,13 +109,21 @@ def test_migrated_schema_matches_the_models(engine: Engine) -> None:
     assert differences == []
 
 
-def test_sqlite_runs_in_wal_mode(engine: Engine) -> None:
-    with engine.connect() as connection:
+@pytest.fixture
+def sqlite_engine(tmp_path: Path) -> Iterator[Engine]:
+    """SQLite whatever NEWS_TEST_DATABASE_URL says, for SQLite's own connection settings."""
+    engine = create_engine_for(f"sqlite:///{tmp_path / 'news.db'}")
+    yield engine
+    engine.dispose()
+
+
+def test_sqlite_runs_in_wal_mode(sqlite_engine: Engine) -> None:
+    with sqlite_engine.connect() as connection:
         assert connection.execute(text("PRAGMA journal_mode")).scalar_one() == "wal"
 
 
-def test_sqlite_enforces_foreign_keys(engine: Engine) -> None:
-    with engine.connect() as connection:
+def test_sqlite_enforces_foreign_keys(sqlite_engine: Engine) -> None:
+    with sqlite_engine.connect() as connection:
         assert connection.execute(text("PRAGMA foreign_keys")).scalar_one() == 1
 
 

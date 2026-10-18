@@ -278,8 +278,8 @@ def promote_draft(
     # Claim the Plugin row before numbering. A competing promotion has either moved the pointer
     # already or waits on this write lock, so it never computes the same number. A conditional
     # write rather than FOR UPDATE, because SQLite ignores row locks. The waiter re-reads the
-    # pointer only under Postgres READ COMMITTED (the default) and pysqlite's implicit BEGIN at
-    # the first write; a stricter isolation level turns the lost race into a database error.
+    # pointer only under Postgres READ COMMITTED (pinned by `create_engine_for`) and pysqlite's
+    # implicit BEGIN at the first write; a stricter level turns the lost race into a database error.
     claimed = session.scalar(
         update(Plugin)
         .where(Plugin.id == plugin_id, Plugin.current_revision_id.is_not_distinct_from(current))

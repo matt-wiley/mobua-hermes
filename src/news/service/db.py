@@ -4,13 +4,19 @@ from typing import Any
 
 from alembic import command
 from alembic.config import Config
-from sqlalchemy import Engine, create_engine, event
+from sqlalchemy import Engine, create_engine, event, make_url
 
 
 def create_engine_for(url: str) -> Engine:
     # A database error may reach the CLI traceback log; bound values include saved source
     # and credentials, so SQLAlchemy must omit parameters from its exception strings.
-    engine = create_engine(url, hide_parameters=True)
+    options: dict[str, Any] = {"hide_parameters": True}
+    if make_url(url).get_backend_name() == "postgresql":
+        # Promotion's Plugin-row claim relies on a waiter re-reading the row it waited on,
+        # which only READ COMMITTED does. A stricter server default would turn a lost race
+        # into a serialization failure instead of a conflict.
+        options["isolation_level"] = "READ COMMITTED"
+    engine = create_engine(url, **options)
     if engine.dialect.name == "sqlite":
         event.listen(engine, "connect", _configure_sqlite_connection)
     return engine

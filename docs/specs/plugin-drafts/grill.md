@@ -92,7 +92,7 @@ Current numbers refer to the amended [existing plan](../design-consistency-pass/
 | 09–14 | Time-zone settings, Gateway, call-driven Model Health, scoped access/metadata, usage records/metrics, budget enforcement/defaults. |
 | 15–16 | Ephemeral preview-only tests, actual shared accounting, no Channel Health/lease/schedule effects, foreground cancellation/disconnect cleanup, captured input stability. |
 | 17–20 | Safe Publish, retries/budget failures, scheduler/periodic health/purge, and real container smoke flows including Draft test → promotion → explicit Binding → normal Collection. |
-| 21 | ADR consistency, SQLite/Postgres repository checks, and core CI. |
+| 21 | SQLite/Postgres repository checks and core CI; automated ADR checking canceled on 2026-10-18. |
 
 ## Supporting references
 - [LiteLLM logging: Custom Tags](https://docs.litellm.ai/docs/proxy/logging), checked 2026-10-17: demonstrates request metadata containing tags for logging. Used as a design reference, without changing ADR 0012's decision to build the app's own Gateway.
