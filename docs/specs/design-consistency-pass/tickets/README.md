@@ -12,10 +12,34 @@ amended spec is code complete.
 Ticket 03 is implemented; its [evidence](../evidence/03.md) records the starter, migration,
 saved Draft services, workspaces, and CLI/API gates. Independent review remains separate.
 
+## PR groups
+
+Each group ships as its own branch and pull request. Do not start a group's tickets on
+an earlier group's branch. Branch the next group from the previous group's branch while
+that PR is still open (a stacked PR), or from `main` once it has merged. Tickets within a
+group still follow the ticket workflow and commit individually. Group order is the
+execution order. Two tickets move out of numeric order: 21 runs right after 04, and 09
+runs right before 13. Both moves respect `blocked_by`.
+
+| Group | Theme | Tickets | Delivered value |
+|---|---|---|---|
+| 1 | Foundation | 01, 02, 03 + [review-followups-01](../../review-followups-01/spec.md) | Revisioned data model, encrypted credentials, Draft workspaces |
+| 2 | Draft lifecycle and CI | 04, 21 | Promotion and permanent Revision history; CI and Postgres gates for all later groups |
+| 3 | Plugin runtime | 05, 06 | Hardened, resource-limited Plugin process; manual Collection |
+| 4 | Built-in Plugins | 07, 08 | Initial RSS installation, Eject, explicit Binding upgrades |
+| 5 | LLM Gateway | 10, 11, 12 | Model calls, scoped tokens, call records and metrics |
+| 6 | Budgets | 09, 13, 14 | Cadences, Reader time zone, retention, daily budgets and their settings |
+| 7 | Draft testing | 15, 16 | Ephemeral Draft Test Runs and cancellation |
+| 8 | Publishing | 17, 18 | Articles with Model Attribution, citation retries, budget failures |
+| 9 | Automated operation | 19, 20 | Scheduler, purge, periodic Model Health, end-to-end smoke tests |
+
+Group 1 was built on a single branch before this rule existed. It was split into three
+stacked PRs: 01 with review-followups-01; 02; and the plan revision with 03.
+
 ## Recommended execution order and criterion coverage
 
-Run 04 next, then follow increasing ticket number for a workable serial implementation
-order. Each implementation starts in a fresh context using this spec and its ticket.
+Run 04 next, then follow the PR group order above. Each implementation starts in a
+fresh context using this spec and its ticket.
 The dependency column records actual prerequisites, rather than forcing independent
 work into an artificial serial chain.
 
@@ -50,9 +74,10 @@ storage/logging portion.
 
 **Dependency check:** no cycles or missing targets. Numeric order 01 → 02 → 03 → 04 → 05 →
 06 → 07 → 08 → 09 → 10 → 11 → 12 → 13 → 14 → 15 → 16 → 17 → 18 → 19 → 20 → 21
-is a valid topological order. Currently 04 and 09 are ready because their prerequisites are
-complete; 04 is the recommended next ticket. Ticket 21 can run after 04 independently
-of later runtime/scheduler work and can be brought forward to establish CI earlier.
+is a valid topological order, and so is the PR group order 01 → 02 → 03 → 04 → 21 → 05 →
+06 → 07 → 08 → 10 → 11 → 12 → 09 → 13 → 14 → 15 → 16 → 17 → 18 → 19 → 20. Currently 04
+and 09 are ready because their prerequisites are complete; 04 is the recommended next
+ticket.
 
 ## Delivery stages and dependency splits
 
