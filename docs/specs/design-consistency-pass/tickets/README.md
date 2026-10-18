@@ -69,7 +69,7 @@ work into an artificial serial chain.
 | [18](18-citation-retries-and-publish-budget-failures.md) | Citation retries, Article rejection, and Publish budget exhaustion | todo | 13, 14, 17 | AC-30, AC-40, AC-41 |
 | [19](19-scheduler-purge-and-periodic-model-health.md) | Scheduler, leases, Catch-up, retention purge, and periodic Model Health | todo | 05, 09, 10, 12, 18 | AC-6, AC-32, AC-35, AC-43, AC-44, AC-45 |
 | [20](20-end-to-end-smoke-test.md) | Container smoke tests for scheduled publishing and Draft-to-Collection flow | todo | 07, 08, 16, 18, 19 | AC-57, AC-82 |
-| [21](21-docs-consistency-postgres-and-core-ci.md) | ADR consistency, Postgres repository checks, and core CI | todo | 04 | AC-55, AC-56, AC-58, AC-59 |
+| [21](21-docs-consistency-postgres-and-core-ci.md) | ADR consistency, Postgres repository checks, and core CI | done | 04 | AC-55, AC-56, AC-58, AC-59 |
 
 **Coverage:** AC-1 through AC-82 are assigned, with zero uncovered criteria and zero unknown
 criterion references. AC-23 is intentionally shared between completed storage ticket 02
@@ -119,9 +119,12 @@ Adapter boundary. No horizontal all-models or all-endpoints ticket is introduced
 Ticket 04's review left these open on purpose. Each one is parked where it next matters. See
 [fix-review-minors-04](../../fix-review-minors-04/report.md) for the context.
 
+Ticket 21 settled the isolation level: `create_engine_for` pins READ COMMITTED on Postgres, and
+Postgres test databases default to SERIALIZABLE so the suite proves the pin
+([evidence](../evidence/21.md)).
+
 | Decision | When | Options |
 |---|---|---|
-| Isolation level the promotion claim relies on | Ticket 21 | Pin READ COMMITTED in `create_engine_for`, or keep the documented assumption and prove it on Postgres |
 | Naive `created_at` from SQLite outside `RevisionDetails` | Before ticket 09 | Shared UTC `TypeDecorator` on timestamp columns, or record why projections normalize |
 | Success events (`plugin_draft.promoted`, `.deleted`) logged at flush, before commit | Next grill | Emit after commit at the surfaces, or record flush-time events in the spec/ADR |
 | `plugin_revision.selection_rejected` and `plugin.not_found` not in the spec | Same grill | Amend the spec's Observability list, or fold them into listed events |

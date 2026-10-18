@@ -16,7 +16,7 @@ Significant design changes get an ADR in `docs/adr/`:
 - Start with a metadata block under the title: `Status:` (`Proposed`, `Accepted`, or `Superseded by ADR NNNN`), `Date:` (when accepted), and `Amends:` / `Amended by:` where they apply.
 - Use the existing sections: **Context**, **Decision**, **Alternatives rejected**, **Consequences**.
 - Don't rewrite an accepted ADR's decision. Supersede or amend it with a new ADR, update both ADRs' metadata, and add a short note where the change applies in the old one (see ADRs 0016 and 0018).
-- Add or update its row in the [ADR index](docs/adr/README.md).
+- Add or update its row in the [ADR index](docs/adr/README.md). `uv run python -m scripts.check_adrs` checks the metadata, the reciprocal amendments, and the index; CI runs it on every pull request.
 - If the change introduces or changes a term, update `CONTEXT.md` in the same pull request.
 
 ## Pull requests

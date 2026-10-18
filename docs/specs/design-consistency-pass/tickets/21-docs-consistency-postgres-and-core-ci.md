@@ -1,7 +1,7 @@
 ---
 id: design-consistency-pass-21
 title: "ADR consistency, Postgres repository checks, and core CI"
-status: todo
+status: done
 blocked_by: [design-consistency-pass-04]
 external: null
 ---

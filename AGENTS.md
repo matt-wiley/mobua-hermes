@@ -30,6 +30,8 @@ Use Python 3.14+ and uv:
 - `uv run ruff check .` and `uv run ruff format --check .`: check lint and formatting; use `uv run ruff format .` to format.
 - `uv run pyright`: run strict type checking.
 - `uv run lint-imports`: verify architectural import boundaries.
+- `uv run python -m scripts.check_adrs`: check ADR metadata, reciprocal amendments, and the ADR index.
+- `NEWS_TEST_DATABASE_URL=postgresql+psycopg://user:pass@host/db uv run pytest tests/service`: run the repository tests on Postgres. The user needs `CREATEDB`; each test gets its own database.
 
 ## Coding Style & Naming Conventions
 
@@ -37,7 +39,7 @@ Use four-space indentation, 100-character lines, type annotations, `snake_case` 
 
 ## Testing Guidelines
 
-Use pytest with `test_*.py` files and `test_*` functions. Reuse temporary database fixtures, which apply migrations. Add regression tests for changed behavior, including rejection paths and scope boundaries. Warnings fail tests, and markers are strict. No numeric coverage threshold is configured.
+Use pytest with `test_*.py` files and `test_*` functions. Reuse temporary database fixtures, which apply migrations and default to SQLite; set `NEWS_TEST_DATABASE_URL` to run them on Postgres. Add regression tests for changed behavior, including rejection paths and scope boundaries. Warnings fail tests, and markers are strict. No numeric coverage threshold is configured.
 
 ## Commit & Pull Request Guidelines
 
