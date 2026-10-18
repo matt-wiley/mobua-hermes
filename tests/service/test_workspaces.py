@@ -19,6 +19,7 @@ from news.service.workspaces import (
     advance_marker,
     export_workspace,
     implementation_files,
+    read_marker_version,
     read_workspace,
 )
 from tests.service.factories import a_reader
@@ -295,3 +296,42 @@ def test_save_rejects_unsafe_paths_before_mutation_and_logs_safe_fields(session:
     assert draft.version == 1
     assert logs[0]["event"] == "plugin_draft.save_rejected"
     assert "SENSITIVE" not in str(logs)
+
+
+def test_marker_version_is_read_without_the_implementation_files(
+    session: Session, tmp_path: Path
+) -> None:
+    draft = a_draft(session)
+    directory = tmp_path / "workspace"
+    export_workspace(draft, directory)
+    (directory / IMPLEMENTATION / MANIFEST).unlink()
+    (directory / IMPLEMENTATION / "main.py").unlink()
+
+    version = read_marker_version(directory, draft.reader_id, draft.plugin_id, draft.id)
+
+    assert version == 1
+
+
+@pytest.mark.parametrize("problem", ["other_draft", "missing", "invalid"])
+def test_marker_version_failures_are_actionable(
+    session: Session, tmp_path: Path, problem: str
+) -> None:
+    draft = a_draft(session)
+    directory = tmp_path / "workspace"
+    export_workspace(draft, directory)
+    draft_id = uuid.uuid7() if problem == "other_draft" else draft.id
+    if problem == "missing":
+        (directory / MARKER).unlink()
+    if problem == "invalid":
+        (directory / MARKER).write_text('{"version": 0}')
+
+    with capture_logs() as logs, pytest.raises(WorkspaceError) as raised:
+        read_marker_version(directory, draft.reader_id, draft.plugin_id, draft_id)
+
+    assert f"Cannot read workspace {directory}" in str(raised.value)
+    assert {
+        "other_draft": "different Reader, Plugin or Draft",
+        "missing": "version marker",
+        "invalid": "export again",
+    }[problem] in str(raised.value)
+    assert [log["event"] for log in logs] == ["plugin_workspace.failed"]

@@ -5,8 +5,9 @@ A `reader` table carries a Reader id, and a `channel` table carries a Channel id
 The `reader` and `channel` tables are scoped by their own `id`. Plugin and Plugin Revision rows
 of Built-in Plugins leave the Reader id empty (ADR 0019). The schema tests check these rules.
 
-Plugin Revisions, Channel Revisions and Plugin Bindings are never updated once written: a flush
-that would update one raises ImmutableRevisionError.
+Plugin Revisions, Channel Revisions and Plugin Bindings are never updated once written, and Plugin
+Revisions are never deleted (ADR 0024): a flush or ORM statement that would do so raises
+ImmutableRevisionError. Migrations are the explicit schema-transition boundary and bypass it.
 """
 
 import uuid
@@ -24,7 +25,14 @@ from sqlalchemy import (
     event,
     inspect,
 )
-from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, relationship
+from sqlalchemy.orm import (
+    DeclarativeBase,
+    Mapped,
+    ORMExecuteState,
+    Session,
+    mapped_column,
+    relationship,
+)
 
 type Scope = Literal["app", "reader", "channel"]
 
@@ -189,24 +197,41 @@ class PluginBinding(Base):
     plugin_revision: Mapped[PluginRevision] = relationship()
 
 
-# Never updated once written: edits insert a new Revision instead (ADRs 0016, 0018). Deletes and
-# the current-Revision pointers on Plugin and Channel rows are left alone.
+# Never updated once written: edits insert a new Revision instead (ADRs 0016, 0018). The
+# current-Revision pointers on Plugin and Channel rows are left alone.
 IMMUTABLE_MODELS = (PluginRevision, ChannelRevision, PluginBinding)
+# Never deleted (ADR 0024). Channel Revision and Binding deletion has no policy yet.
+PERMANENT_MODELS = (PluginRevision,)
 
 
 class ImmutableRevisionError(Exception):
-    """A flush would update a Revision or Plugin Binding row: a programming error."""
+    """A write would update a Revision or Plugin Binding row, or delete a Plugin Revision row.
 
-    def __init__(self, table: str, attributes: list[str]) -> None:
-        super().__init__(f"{table} rows are immutable; changed: {', '.join(attributes)}")
+    A programming error: no service offers either.
+    """
+
+    def __init__(
+        self, table: str, attributes: list[str], operation: Literal["update", "delete"] = "update"
+    ) -> None:
+        if operation == "delete":
+            message = f"{table} rows are permanent; delete rejected"
+        elif attributes:
+            message = f"{table} rows are immutable; changed: {', '.join(attributes)}"
+        else:
+            message = f"{table} rows are immutable; bulk update rejected"
+        super().__init__(message)
         self.table = table
         self.attributes = attributes
+        self.operation = operation
 
 
 @event.listens_for(Session, "before_flush")
-def _reject_revision_updates(session: Session, _flush_context: Any, _instances: Any) -> None:
+def _reject_revision_changes(session: Session, _flush_context: Any, _instances: Any) -> None:
     # Registered on the Session class, so every session the CLI or API opens is guarded.
     # In-place changes inside a JSON value aren't tracked, so they never reach this check.
+    for instance in session.deleted:
+        if isinstance(instance, PERMANENT_MODELS):
+            raise ImmutableRevisionError(instance.__tablename__, [], "delete")
     for instance in session.dirty:
         if not isinstance(instance, IMMUTABLE_MODELS):
             continue
@@ -215,3 +240,15 @@ def _reject_revision_updates(session: Session, _flush_context: Any, _instances: 
         changed = sorted(attr.key for attr in state.attrs if attr.history.has_changes())
         if changed:
             raise ImmutableRevisionError(instance.__tablename__, changed)
+
+
+@event.listens_for(Session, "do_orm_execute")
+def _reject_bulk_revision_changes(state: ORMExecuteState) -> None:
+    # ORM-enabled update() and delete() statements skip the flush, so they are checked here.
+    if state.bind_mapper is None:
+        return
+    model = state.bind_mapper.class_
+    if state.is_delete and issubclass(model, PERMANENT_MODELS):
+        raise ImmutableRevisionError(model.__tablename__, [], "delete")
+    if state.is_update and issubclass(model, IMMUTABLE_MODELS):
+        raise ImmutableRevisionError(model.__tablename__, [])

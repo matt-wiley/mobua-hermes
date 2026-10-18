@@ -28,6 +28,7 @@ AC-55, AC-56, AC-58, AC-59
 - AC-58: real migrated repository/schema tests pass on Postgres and SQLite; a deliberately incompatible scratch construct proves the Postgres run uses Postgres.
 - AC-59: actionlint validates YAML; PR and main triggers run every core gate, Postgres job, and local docs checker. A deliberately broken index fails CI.
 - Maintain implementation-plan coverage/dependency links as documentation changes; preserve completed evidence and use the numbering map for historical references.
+- Carried from ticket 04: on Postgres, an overlapping sibling promotion must wait on the Plugin-row claim, then get 409 `stale_current_selection` (no deadlock, no 503). Decide whether to pin READ COMMITTED in `create_engine_for` or rely on the documented default (README "Deferred decisions").
 
 ## Deployment verification
 - Own docs-check and PR CI checklist items, plus actual Postgres portability evidence. A workflow file alone does not prove hosted CI ran; record deployment/hosted checks under Not verified until observed.

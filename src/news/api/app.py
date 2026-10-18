@@ -23,12 +23,19 @@ from news.service.drafts import (
     delete_draft,
     get_draft,
     list_drafts,
+    promote_draft,
     save_draft,
 )
 from news.service.observability import configure_logging
-from news.service.plugin_data import DraftDetails, PluginStarter
+from news.service.plugin_data import DraftDetails, PluginStarter, RevisionDetails, RevisionHistory
 from news.service.plugins import create_plugin
 from news.service.readers import ReaderNotFound
+from news.service.revision_history import (
+    CurrentSelectionConflict,
+    PluginNotFound,
+    list_revisions,
+    select_current_revision,
+)
 from news.service.validation import ValidationRejected
 
 log = structlog.get_logger(__name__)
@@ -81,6 +88,36 @@ class DraftSave(BaseModel):
     code: dict[str, str]
 
 
+class DraftPromote(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    expected_version: int = Field(gt=0, strict=True)
+    # Required when the Draft's parent is not the current Revision (ADR 0024).
+    expected_current_revision_id: uuid.UUID | None = None
+
+
+class CurrentRevisionSelect(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    revision_id: uuid.UUID
+    expected_current_revision_id: uuid.UUID
+
+
+@app.exception_handler(CurrentSelectionConflict)
+async def selection_conflict_response(
+    _request: Request, error: CurrentSelectionConflict
+) -> JSONResponse:
+    return JSONResponse(
+        status_code=409,
+        content={
+            "errors": [asdict(field) for field in error.errors],
+            "reason": error.reason,
+            "expected_current_revision_id": str(error.expected) if error.expected else None,
+            "actual_current_revision_id": str(error.actual) if error.actual else None,
+        },
+    )
+
+
 @app.exception_handler(DraftConflict)
 async def conflict_response(_request: Request, error: DraftConflict) -> JSONResponse:
     return JSONResponse(
@@ -101,6 +138,7 @@ async def validation_response(_request: Request, error: ValidationRejected) -> J
 
 
 @app.exception_handler(DraftNotFound)
+@app.exception_handler(PluginNotFound)
 @app.exception_handler(ReaderNotFound)
 async def missing_response(_request: Request, error: LookupError) -> JSONResponse:
     return JSONResponse(status_code=404, content={"detail": str(error)})
@@ -186,3 +224,52 @@ def draft_delete(
     with transaction(request) as session:
         delete_draft(session, reader_id, plugin_id, draft_id)
     return Response(status_code=204)
+
+
+@app.post(DRAFTS + "/{draft_id}/promote", status_code=201)
+def draft_promote(
+    request: Request,
+    reader_id: uuid.UUID,
+    plugin_id: uuid.UUID,
+    draft_id: uuid.UUID,
+    body: DraftPromote,
+) -> RevisionDetails:
+    with transaction(request) as session:
+        result = RevisionDetails.model_validate(
+            promote_draft(
+                session,
+                reader_id,
+                plugin_id,
+                draft_id,
+                body.expected_version,
+                body.expected_current_revision_id,
+            )
+        )
+    return result
+
+
+PLUGIN = "/readers/{reader_id}/plugins/{plugin_id}"
+
+
+@app.get(PLUGIN + "/revisions")
+def revision_history(
+    request: Request, reader_id: uuid.UUID, plugin_id: uuid.UUID
+) -> RevisionHistory:
+    with transaction(request) as session:
+        result = list_revisions(session, reader_id, plugin_id)
+    return result
+
+
+@app.put(PLUGIN + "/current-revision")
+def current_revision_select(
+    request: Request,
+    reader_id: uuid.UUID,
+    plugin_id: uuid.UUID,
+    body: CurrentRevisionSelect,
+) -> RevisionHistory:
+    with transaction(request) as session:
+        select_current_revision(
+            session, reader_id, plugin_id, body.revision_id, body.expected_current_revision_id
+        )
+        result = list_revisions(session, reader_id, plugin_id)
+    return result

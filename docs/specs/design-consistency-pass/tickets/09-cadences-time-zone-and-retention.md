@@ -14,6 +14,9 @@ Persist interval/cron Collection and Publishing cadences, Reader time zone, and 
 ## Criteria covered
 AC-46, AC-47, AC-48
 
+## Prerequisite decision
+- SQLite returns naive `created_at` values outside `RevisionDetails`. Decide how stored timestamps are normalized to UTC before computing instants or comparing them (README "Deferred decisions").
+
 ## Seams
 - Pure core: interval/cron parsing, zoneinfo day boundaries and next instants, longest cron gap, Retention Window comparison; injected clock.
 - Edges: new migrations/settings, Channel Revision save, CLI. This supplies Reader time zone for budgets without depending on scheduling.

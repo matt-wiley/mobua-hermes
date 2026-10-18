@@ -1,180 +1,175 @@
-# Code-complete report: Design consistency pass (ticket 03)
+# Code-complete report: Design consistency pass (ticket 04)
 
-- **Covers:** `e76d2df..1e66aa2` on branch `feat/design-consistency-pass`.
-- **Branch merge-base:** `b1afb214eb1e3b059373079ad2fa2a2c5f4f55d9` with `main`. This review covers only ticket 03's commits:
-  - Original work: `7205191`, `705a5d8`, `79483f3`, `1128362`.
-  - The previous review report: `2176d50`.
-  - Fixes made after that review: `447bc14`, `4599f97`, `e6ad193`, `c90c4e9`, `1e66aa2`.
-
-  Earlier branch work is context and was not reviewed again.
-- **Spec:** `docs/specs/design-consistency-pass/spec.md`, as amended by D-70 (ADR 0026).
-- **Tickets:** `design-consistency-pass-03`, local status `done`, covering AC-60 to AC-64. Work belonging to other tickets:
-  - Promotion and AC-81: ticket 04.
-  - Restricted execution of the starter: ticket 05.
-  - Draft Test Runs: tickets 15 and 16.
-- **Fix reports:** `docs/specs/fix-starter-manifest-toml-escaping/report.md`, `docs/specs/fix-draft-conflict-reason/report.md`, `docs/specs/fix-workspace-two-file-rule/report.md`.
+- **Covers:** `13eabf9..61712d1` on branch `feat/draft-promotion-and-ci` (PR group 2). The
+  branch merge-base with `main` is `13eabf913e452161141fdfa42407c8b94dcf61f1`. Code commits:
+  `03b642c`, `fac30cc`, `0934996`, `e0122be`, `5dd2880`, `61712d1`. Records: `8084970`
+  (evidence), `c2978e5` (the previous report). Ticket 21, the other member of group 2, has not
+  started and is not reviewed here.
+- **Spec:** `docs/specs/design-consistency-pass/spec.md`
+- **Tickets:** `design-consistency-pass-04` (local status `done`), covering AC-49, AC-65,
+  AC-66, AC-67, AC-68, AC-69, AC-81. Evidence: `evidence/04.md`, plus
+  `docs/specs/fix-concurrent-promotion-number/report.md` for `61712d1`.
 - **Sync:** n/a, because the ticket has `external: null`.
-- **Date:** 2026-10-17.
+- **Date:** 2026-10-17. This report replaces the review of `13eabf9..8084970`.
 
 ## Verdict
-
-**CODE COMPLETE**: all three review axes pass, with no blockers or majors, and all gates are green (300 tests).
-
-Three reviewers checked `1e66aa2` in parallel. Each started with no prior context and none edited files.
-- Both majors from the previous review are fixed:
-  - Starter Manifest names are now escaped as TOML, not JSON.
-  - The FastAPI `Depends` scope rule in `docs/standards.md` is corrected.
-- Two of the previous Spec minors are fixed: the conflict log now has a `reason`, and workspace clutter (`.DS_Store`, `.pyc`) no longer breaks saves.
-- The remaining findings are minors and do not block.
-
-The coordinating reviewer confirmed two of the new minors by reading the code: the unreachable export handler, and the `.exists()` check that misreports a dangling symlink.
+**CODE COMPLETE**: all three axes pass and every code-complete item holds. The earlier major
+(concurrent same-number promotion untested) is fixed by `61712d1`. That fix is covered by
+real-connection race tests at the service and API layers, and they fail against the old code.
+Only minor findings remain.
 
 ## Findings
+There are no blockers or majors. Each finding cites its source.
 
-No blockers or majors. Minors are grouped by axis. "Carried over" means the finding was in the previous report and is still open.
+### Standards (PASS)
+- [minor] `src/news/service/drafts.py:278-292`
+  - Rule: baseline §1, "comments say **why**", and §5, "Every failure mode is either handled deliberately or fails loudly".
+  - Problem: the Plugin-row claim is a no-op conditional `UPDATE` in place of `with_for_update()`, and the comment does not say why (SQLite ignores row locks).
+  - Problem: correctness also depends on two assumptions that nothing pins: READ COMMITTED on Postgres, and pysqlite's legacy implicit BEGIN on SQLite. Under REPEATABLE READ, or with an explicit-BEGIN SQLite recipe, the losing race becomes a 503 instead of a 409.
+  - Problem: the claim repeats `revision_history.move_current_pointer`'s compare-and-set (`revision_history.py:108-120`).
+  - Fix: state both assumptions in the comment, or pin `isolation_level` in `create_engine_for`. Optionally share the compare-and-set helper.
+- [minor] `src/news/cli/main.py:344-351`
+  - Rule: baseline §1, "Prefer plain, obvious constructs over clever ones".
+  - Problem: the tuple `match` binds `version` in a `pass` arm. The discarded `get_draft(...)` call has no comment saying it reports DraftNotFound before the workspace is read. This finding is still open from the last review.
+  - Fix: use a plain exactly-one-of `if`, and add a why-comment on the existence check.
+- [minor] `src/news/service/revision_history.py:95`
+  - Rule: baseline §1, "Prefer plain, obvious constructs over clever ones".
+  - Problem: `if problem is None and move_current_pointer(...)` runs a write inside a short-circuit test. The fall-through then rebuilds the reason with `problem or "stale_current_selection"`.
+  - Fix: split it into explicit steps: a problem conflict, then a failed-pointer-move conflict, then flush.
+- [minor] `src/news/service/models.py:207-254`
+  - Rule: baseline §1, "Names carry the meaning".
+  - Problem: `ImmutableRevisionError(table, [])` uses an empty attribute list to signal a bulk update.
+  - Fix: add an explicit `operation: Literal["update", "bulk_update", "delete"]`, or named constructors.
+- [minor] `src/news/service/plugin_data.py`, the UTC projection. This is still open from the last review.
+  - Rule: baseline §4.
+  - Problem: SQLite's naive `created_at` is normalized only in the `RevisionDetails` projection.
+  - Fix: use a shared `TypeDecorator`, or record why the projection is the boundary.
+- Snapshot freshness: current. `docs/standards.md` matches Python 3.14, FastAPI 0.143 and SQLAlchemy 2.1. There is a gap but no staleness: Typer 0.27, Pydantic 2.14 and Alembic 1.20 have no researched rules.
 
-### Standards
+### Spec (PASS)
+- [minor] `src/news/service/drafts.py:324`
+  - Source: AC-69, "Success is reported only after commit".
+  - Problem: `plugin_draft.promoted` is logged at flush, before the surface commits. A failed commit still leaves a "promoted" line in the log. The commit-failure tests don't assert on logs.
+  - Fix: log after commit, or record flush-time events in the spec or an ADR. Either way, assert logs in the commit-failure tests.
+- [minor] `src/news/service/revision_history.py:87,157`
+  - Source: the spec Observability list names only `plugin_draft.*` for this flow.
+  - Problem: `plugin_revision.selection_rejected` and `plugin.not_found` are not in the spec.
+  - Fix: amend the Observability list, or fold these into listed events.
+- [minor] `tests/service/test_promotion.py:257-268`
+  - Source: AC-65, "Check state before rollback and committed state".
+  - Problem: the failed-commit test checks committed state only after `session.rollback()`. Line 73 of `evidence/04.md` overstates this.
+  - Fix: assert `committed_state(engine) == before` before the rollback.
+- [minor] `tests/service/test_immutability.py`
+  - Source: AC-68, "Manifest/code/ancestry/metadata remain immutable".
+  - Problem: only `note` and `manifest` updates are tested.
+  - Fix: parametrize over `code`, `parent_revision_id`, `created_by` and `created_at`.
+- [minor] `tests/cli/test_revisions.py`
+  - Source: AC-67.
+  - Problem: the CLI lacks two cases the API tests have: a foreign Revision inside one's own Plugin, and a `plugin_revision` INSERT commit failure.
+  - Fix: add the two parametrized cases.
+- [minor] AC-81, "test stdout/stderr are returned only to the invoking caller"
+  - Problem: this clause can't be tested until Test Runs exist.
+  - Fix: note in the tickets README or the evidence that the Test Run tickets (AC-71/75) verify it.
+- Note: ticket 04 line 43 mentions "a new migration", but none was needed. The ticket 03 schema plus the ORM guard satisfy AC-68 ("service/ORM"). Correct the ticket wording.
+- Scope: nothing beyond the ticket. Nothing contradicts ADR 0024 or D-25/ADR 0022.
 
-- **[minor] `src/news/service/workspaces.py:91-96,117-118`** (new): export now refuses any code set other than `{main.py}` before it calls `implementation_files`. That call therefore can never raise, and the `except ValidationRejected` handler ("unsafe or conflicting file paths") is dead code.
-  - **Source:** baseline §6 (no dead code).
-  - **Fix:** build `{MANIFEST: draft.manifest, **draft.code}` directly and drop the handler. Alternatively, fold this into the `implementation_files` split below.
-- **[minor] `src/news/service/workspaces.py:142-143`** (new): the Manifest check uses `.exists()`, which follows symlinks. A dangling `manifest.toml` symlink is reported as "missing implementation/manifest.toml" instead of as a rejected link. It is still rejected, so the outcome is safe.
-  - **Source:** baseline §5 (failures are handled deliberately and accurately).
-  - **Fix:** use `exists() or is_symlink()`, as the `main.py` check on line 147 already does, and add a dangling-link case to the read-failure tests.
-- **[minor] `src/news/service/plugins.py:44`** (new): the clause "JSON escaping misses DEL" describes code that has since been removed.
-  - **Source:** baseline §1 (comments say why, not history).
-  - **Fix:** keep only the first clause.
-- **[minor] `src/news/api/app.py:51-61`** (carried over): every route opens a hand-rolled `with transaction(request)`. Its comment no longer has a reason to stand on, because the corrected standard names `Depends(..., scope="function")` as the idiom for this exact case.
-  - **Source:** baseline §4, and `docs/standards.md:55`.
-  - **Fix:** use `Annotated[Session, Depends(session_dependency, scope="function")]` and keep the `SQLAlchemyError` → 503 mapping.
-- **[minor] `src/news/api/app.py:144,156,179`** (carried over): route paths are built by string concatenation (`DRAFTS + "/{draft_id}"`).
-  - **Fix:** use `APIRouter(prefix=...)`.
-- **[minor] `src/news/service/drafts.py:51-54`** (carried over): a `DraftConflict` is caught only to log it and raise a new one.
-  - **Source:** baseline §1.
-  - **Fix:** compare inline, or make the pure core a predicate.
-- **[minor] `src/news/service/workspaces.py:48-49`** (carried over): the docstring of `implementation_files` says "Select", but the function only validates. The read path no longer calls it, and `save_draft` discards its result.
-  - **Fix:** split it into a validator and a Manifest-merge helper.
-- **[minor] `src/news/cli/main.py:285`** (carried over): the result of `get_draft(...)` is discarded, and the call's intent (an ownership check) is not stated.
-  - **Fix:** add a one-line reason.
-- **[minor] `docs/standards.md`** (carried over, stale snapshot):
-  - Typer 0.27 and Pydantic 2.14 have no sections.
-  - The Alembic section still says "No version-specific rules have been researched yet".
-  - The header date (2026-10-16) does not reflect the hand edit to line 55 on 2026-10-17.
-
-  The versions it does cover (Python 3.14, FastAPI 0.143, SQLAlchemy 2.1) match the resolved versions.
-  - **Source:** baseline §4.
-  - **Fix:** run `/mobua-swe:standards` or `/mobua-swe:setup`.
-
-### Spec
-
-- **[minor] `tests/cli/test_drafts.py:64-101`** (new): `c90c4e9` replaced the file removal in the CLI round-trip with an edit plus clutter files. Removing `main.py` is still tested at the workspace level (`test_removing_main_py_saves_an_empty_code_set`), and saving an empty set is tested at the service level. No test runs the whole sequence: export, unlink `main.py`, save, then confirm through the CLI and the API that `code == {}` was committed.
-  - **Source:** the ticket's Verification line: "AC-63: CLI export/edit/save round-trip and API read agree, file removals are saved".
-  - **Fix:** add that CLI round-trip.
-- **[minor] `tests/cli/test_drafts.py:135`** (carried over): the CLI foreign-Reader parametrization leaves out `list`.
-  - **Source:** AC-62.
-  - **Fix:** add `"list"`.
-- **[minor] `tests/api/test_drafts.py:216-219`** (carried over, optional): the API stdout log test checks only event names and level. The new `reason` field is not asserted on the API path. Exact fields are covered at the service level.
-- **[minor] ADR 0026 Consequences and `docs/plugin-drafts.md`** (new): a Draft copied from a legacy multi-file Revision (preserved by D-68, see `test_draft_migration.py:56`) cannot be exported through the CLI. It can only be edited through the API. The ADR mentions only Drafts saved through the API.
-  - **Fix:** add one line saying such Drafts are API-only until the Plugin design session.
-
-### Code-complete evidence
-
-- **[minor] `tests/service/test_drafts.py:121`** (carried over): `plugin_draft.parent_rejected` and `plugin_draft.not_found` are checked only by count and level.
-  - **Source:** `code-complete.md` item 4.
-  - **Fix:** assert the exact event dict.
-- **[minor] `src/news/service/drafts.py:96`** (carried over): `plugin_draft.deleted` is logged before the surface commit. No CLI log-file assertion covers it.
-  - **Fix:** document the log-before-commit convention, or assert in the CLI commit-failure test.
-- **[minor] `docs/specs/design-consistency-pass/evidence/03.md:56,69-78,154-165`** (new): the evidence predates the fixes made after the review.
-  - It still describes nested files, "imports include additions and removals", and 290 tests.
-  - It names the branch `feat/design-consistency-pass--codex-test`.
-
-  This report and the three fix reports carry the current state.
-  - **Fix:** add a short "superseded by" note pointing to the fix reports and D-70.
+### Code-complete evidence (PASS)
+- [minor] `src/news/service/drafts.py:278-292`, `tests/service/test_promotion.py`
+  - Source: item 1, each failure mode.
+  - Problem: the claim's lock-wait branch has no committed test. In that branch a competitor is mid-transaction and the claim waits on its write lock. Every committed race test interleaves before the claim. The reviewer ran a threaded scratch probe: the promotion waited about 1.1 s, then raised `stale_current_selection`, and the numbers were `[1, 2]`. The behavior holds on SQLite, but the suite doesn't pin it.
+  - Fix: add a threaded test that pauses the competitor after its `UPDATE plugin` (`after_cursor_execute` plus `threading.Event`).
+- [minor] `evidence/04.md:80-86`
+  - Source: evidence accuracy.
+  - Problem: this text is stale after `61712d1`. It still says the hook commits "just before the Revision INSERT. Two cases". There are now three race cases, all interleaved before `UPDATE plugin`.
+  - Fix: update the Races paragraph.
+- [minor] `docs/specs/fix-concurrent-promotion-number/report.md`, the "Red" section
+  - Source: item 2, red for the right reason.
+  - Problem: the recorded service red is `IntegrityError UNIQUE`, from the old interleave point. Against the old code, the committed test now fails with `database is locked`. Both show the defect, but the report doesn't say so.
+  - Fix: add one sentence noting the difference.
+- [minor] `tests/service/test_promotion.py`, `test_a_save_racing_the_promotion_is_a_conflict_after_rollback`
+  - Source: item 4.
+  - Problem: no `capture_logs()`. The pointer and sibling races now assert `plugin_draft.conflict`, but this one doesn't.
+  - Fix: assert the event (`operation="promote"`, the versions and the reason).
+- [minor] `tests/api/test_revisions.py:157-180`
+  - Source: item 4.
+  - Problem: the API race test doesn't check that stdout has `plugin_draft.conflict` and no `api.database_failed`. Those log lines are the observable difference the fix promises.
+  - Fix: parse stdout the way the lifecycle-log test does.
+- [minor] `evidence/04.md`, the AC-65, AC-66 and AC-81 sections
+  - Source: item 2.
+  - Problem: these sections still rely on one combined red summary. This finding is still open from the last review.
+  - Fix: add a red excerpt per criterion.
+- Resolved since the last review:
+  - The concurrent same-number major. The reviewer restored the pre-fix `drafts.py` in a scratch copy, and all 4 race tests failed. The API test got 503 instead of 409.
+  - The race-conflict logging minor, for the pointer and sibling races.
 
 ## Criteria evidence
-
 | Criterion | Tests (names) | Happy | Failure | Boundary | Edge | Red-first | Green |
 |---|---|---|---|---|---|---|---|
-| AC-60 starter | `test_plugin_starter.py::test_new_plugin_has_a_valid_noop_starter` (parses the Manifest; runs `main.py`: exit 0, no output), `::test_blank_name_rejected_without_rows_or_payload_logs`; `test_cli.py::test_plugin_is_created_with_a_valid_starter`; `tests/api/test_drafts.py::test_api_starter_and_draft_crud` | yes | yes: blank and whitespace names | yes: U+001F and U+007F at the edges of the escaped range, U+0080 just past it; 200k-string `tomllib` fuzz run by the reviewer | yes: backslash before `u`, quotes, emoji, newline, U+2028 | yes: `7205191`, `447bc14` | yes |
-| AC-60 migration | `test_draft_migration.py::test_upgrade_preserves_legacy_history_without_inventing_ancestry` | yes: whole-database snapshot is equal | n/a: the migration is additive | yes: non-contiguous numbers 1 and 4 | yes: CRLF/Unicode, older current pointer, pinned Binding, downgrade and re-upgrade | yes: `7205191` | yes (SQLite only) |
-| AC-61 | `test_drafts.py::test_parent_eligibility_is_same_reader_and_plugin`, `::test_sibling_drafts_copy_an_older_parent_independently`, `::test_bad_targets_insert_nothing_before_rollback`, `::test_unknown_and_foreign_reads_and_lists_are_indistinguishable`; API `test_api_rejects_invalid_parent_targets_without_inserting`, `::test_foreign_and_unknown_api_targets_return_identical_safe_errors` | yes | yes: foreign, wrong Plugin, unknown, Built-in | yes: checked before rollback and from a separate session | yes: sibling Drafts of an older parent | yes: `705a5d8` | yes |
-| AC-62 | `test_draft_saves.py::test_unfinished_saves_replace_files_and_preserve_revision_and_binding_state`; CLI `test_cli_export_edit_save_read_matches_api_and_discards_only_saved_draft`; `test_rejected_save_and_delete_preserve_state_before_rollback_and_after_commit`; CLI and API foreign-target tests | yes | yes: scope rejections (CLI `list` missing, minor) | yes: empty file set | yes: invalid TOML, unfinished code, unpinned dependencies | yes: `705a5d8` | yes |
-| AC-63 (as amended by D-70) | `test_workspaces.py::test_export_edit_read_and_marker_advance_preserve_exact_text`, `::test_read_ignores_every_file_except_the_manifest_and_main_py`, `::test_removing_main_py_saves_an_empty_code_set`, `::test_export_refuses_drafts_with_files_other_than_main_py`, `::test_read_failures_are_actionable_and_never_return_partial_contents`, `::test_failed_export_leaves_no_partial_destination`; `test_draft_saves.py::test_expected_version_rule`, `::test_stale_saves_even_with_a_cached_draft_leave_state_unchanged_and_log_only_ids`, `::test_competing_saves_allow_one_writer_and_refuse_the_other`; CLI stale, unreadable, commit-failure and marker-write-failure tests | yes | yes: stale save, unreadable files, commit failure | yes: symlinks, directories and FIFOs at `main.py`/the Manifest | yes: CRLF, invalid UTF-8, two threaded writers, `.DS_Store`/`.pyc`/backup clutter. Dangling Manifest symlink untested (minor). Removal not tested through the CLI end to end (minor). | yes: `79483f3`, `c90c4e9` (first-run passes disclosed) | yes |
-| AC-64 | `test_draft_saves.py::test_discard_deletes_only_that_draft_and_logs_ids`, `::test_rejected_save_and_delete_preserve_state_before_rollback_and_after_commit[delete-*]`; CLI round-trip; CLI and API foreign `[delete]` | yes | yes | yes: sibling Draft kept | yes: exported files and marker kept | yes: `705a5d8` | yes |
-
-The reviewers read the test code behind every row; none of it was taken from the evidence file on trust.
-- **Commit order:** tests always landed in the same commit as the code they cover.
-- **Mocks:** the only mocking is `monkeypatch.setenv`.
-- **Boundaries:** every boundary has a real integration test:
-  - Database: real Alembic on migrated SQLite, a WAL two-thread race, and deferred-constraint COMMIT failures.
-  - Filesystem: real temporary directories.
-  - CLI: `CliRunner`.
-  - API: `TestClient`, plus an OpenAPI contract test.
-- **Removed or retargeted tests:**
-  - Tests removed in `c90c4e9` covered behaviour that D-70 took away: the read-time path-safety branch and the nested `util.py` round-trip.
-  - The symlink and FIFO cases were retargeted to `main.py` and the Manifest.
-  - The API code-map path-safety tests are kept.
-  - The reasons are recorded in `docs/specs/fix-workspace-two-file-rule/report.md`.
-
-  No test was skipped, marked xfail, or weakened without a stated reason.
+| AC-49 | `test_implementation`: exact pin accepted; `>=`, `~=`, `==6.*`, ranges, URL and bare name rejected; no-deps accepted; malformed metadata rejected. Promotion, API and CLI invalid-Draft tests | yes | yes | yes (empty, no block, `[]`, CRLF) | yes (`===`, `==6.*`) | yes | yes |
+| AC-65 | `test_promotion`: creates current Revision, flushed-not-committed, invalid Draft, stale or future version, failed commit, save/pointer/sibling races. API and CLI commit-failure tests | yes | yes (failed commit not checked before rollback) | yes | yes (3 races) | combined summary | yes |
+| AC-66 | sibling distinct numbers, `test_a_sibling_promotion_racing_for_the_same_number_is_a_conflict_after_rollback`, older parent needs confirmation (copied as-is), reconfirmation, numbering after pointer rollback. API sibling-race and confirmation tests | yes | yes (lock-wait branch probed only) | yes | yes | combined summary + fix report reds | yes |
+| AC-67 | `test_revision_history`: tree, select older or current creates nothing, unknown/other-Plugin/foreign/Built-in rejected, Reader scope. API and CLI select/reject tests, CLI and API history parity | yes | yes (CLI foreign-Revision case missing) | yes | yes (Built-in) | yes | yes |
+| AC-68 | `test_immutability`: delete rejected, bulk ORM statements guarded, update tests. No archive/delete in API or CLI. Channel Revision and Binding deletes allowed | yes | partial (code, ancestry, metadata updates) | n/a: no ranges | yes (bulk ORM bypass) | yes | yes |
+| AC-69 | API and CLI commit failure (503, empty stdout), 409 and 422 bodies, CLI stderr, `test_promotion_does_not_require_a_successful_test_run` | yes | yes | n/a: no ranges | yes | yes | yes |
+| AC-81 | Exact event dicts in service tests, API stdout lifecycle-log test, CLI log-file test, sentinel and requirement text absent | yes | yes (save race and API race not log-asserted) | n/a | yes (no leak to stdout) | not shown on its own | yes |
 
 ## Gates
-
-These are fresh runs at `1e66aa2`:
+Run independently by the reviewers on `61712d1`.
 
 | Gate | Command | Result |
 |---|---|---|
-| Typecheck | `uv run pyright` | pass: 0 errors, 0 warnings |
-| Lint | `uv run ruff check .` | pass |
-| Format | `uv run ruff format --check .` | pass: 157 files formatted |
-| Imports | `uv run lint-imports` | pass: 1 contract kept, 0 broken |
-| Full suite | `uv run pytest` | pass: 300 tests, 0 skipped, about 6 s |
+| Typecheck | `uv run pyright` | pass (0 errors, 0 warnings) |
+| Lint | `uv run ruff check . && uv run ruff format --check . && uv run lint-imports` | pass (166 files formatted; 1 contract kept, 0 broken) |
+| Full suite | `uv run pytest` | pass (411 passed, 0 skipped, 0 failed) |
+| Build | `uv build` | pass (sdist and wheel) |
+
+No tests were deleted, skipped or weakened. `test_deleting_revision_rows_is_not_blocked` was
+renamed with an identical body, and the route-inventory test was tightened. The new tests use
+no mocks. Races and commit failures run on real migrated SQLite, through a second engine
+connection and deferred-constraint triggers. Tests landed with their code in every code commit.
 
 ## Observability delivered
-
-- **Logs:**
-  - `info plugin_draft.deleted`: Reader/Plugin/Draft ids. Asserted as an exact dict at the service level, and on API stdout.
-  - `info plugin_draft.conflict`: ids, `operation`, expected/actual version, and `reason="stale_version"`, with no payload. This matches spec.md:343. It is asserted:
-    - as an exact dict at the service level;
-    - in the competing-writers test;
-    - by event name and operation in the CLI log file;
-    - by event name on API stdout.
-  - `plugin_draft.save_rejected`, `plugin_workspace.failed`, `plugin.rejected` and `api.database_failed` are asserted.
-  - `plugin_draft.parent_rejected` and `plugin_draft.not_found` are checked by count and level only (minor).
-  - The CLI writes JSON lines to its log file, and the API logs to stdout. `hide_parameters=True` keeps saved source out of database error text.
-- **Metrics:** none added. This is justified by the spec ("no other metrics in this spec") and D-44.
+- Logs, all at info level through structlog. They carry ids, reason codes and field names only, with no Manifest, code, config or credentials:
+  - `plugin_draft.promoted` (`drafts.py:324`)
+  - `plugin_draft.rejected`
+  - `plugin_draft.conflict` (now also emitted for a lost sibling-promotion race)
+  - two events outside the spec, `plugin_revision.selection_rejected` and `plugin.not_found` (see Spec findings)
+- Where the logs go: the CLI writes to its log file and the API to stdout, and tests cover both.
+- Metrics: none, because the ticket says "No new metrics".
 
 ## Not verified
-
 Code complete is not deployment verified. This review did **not** verify:
-
 - Deployment, runtime behavior in the target environment, or real traffic and data.
-- The Draft migration and `UPDATE … RETURNING` on PostgreSQL. All tests run on SQLite; PostgreSQL is ticket 21.
-- Restricted execution of the starter (ticket 05), promotion and AC-81 (ticket 04), and Draft Test Runs (tickets 15–16).
-- How real macOS Finder and real editors behave inside an exported workspace. Clutter is tested only with synthetic files.
+- Postgres behavior of the claim's row lock, the `IS NOT DISTINCT FROM` and `RETURNING` conditional writes, and the bulk-ORM guard. Only SQLite was run; ticket 21 owns this.
+- The lock-wait race branch in the committed suite. It was shown only by a scratch probe on SQLite.
+- A CLI-level concurrent-promotion race. The CLI shares the service path.
+- Spec deployment checks 10 and 11, which were never run in a container.
 
 ## Deployment verification checklist
+Evaluate manually or in the observability system to confirm the deployed change matches the intent of the spec or ticket.
 
-Check each item manually or in the observability system to confirm the deployed change does what the spec and ticket intend.
-
-- [ ] **Pre-Draft upgrade:** run `news db upgrade` against a copy of a pre-Draft database that holds representative non-sensitive Plugins, Revisions and Bindings, on both SQLite and PostgreSQL. Diff `plugin`, `plugin_revision` and `channel_binding` before and after.
-  - Good: ids, numbers, contents, current pointers and Bindings are identical.
-  - Good: every `parent_revision_id` is NULL.
-  - Good: there are no `plugin_draft` rows and no synthetic starter Revisions.
-- [ ] **Starter:** create a Reader Plugin through the CLI and through the API, using a name with quotes, a backslash and an emoji.
-  - Good: Revision 1 is current.
-  - Good: its Manifest parses with `tomllib` and keeps the name exactly.
-- [ ] **Unfinished Draft save:** export a Draft, put invalid TOML in `manifest.toml`, then delete `main.py` and save.
-  - Good: CLI read and list agree with API GET, and `code` is empty.
-  - Good: no new Revision is created, and no current pointer or Binding changes.
-- [ ] **macOS clutter:** open the exported `implementation/` folder in Finder (which creates `.DS_Store`), and run `main.py` locally (which creates `__pycache__`). Edit `main.py` with an editor that writes backup files, then save.
-  - Good: the save succeeds, and only `manifest.toml` and `main.py` are stored.
-- [ ] **Stale save:** export a Draft, update the same Draft through the API, then save the stale workspace from the CLI.
-  - Good: the CLI reports a conflict.
-  - Good: the stored contents and the local marker are unchanged.
-  - Good: the CLI log file has `plugin_draft.conflict` with ids, `operation="save"`, expected/actual version and `reason="stale_version"`, and no source.
-- [ ] **Discard:** delete the Draft.
-  - Good: a sibling Draft, all Revisions, all Bindings and the local exported files remain.
-  - Good: server stdout or the CLI log has `plugin_draft.deleted` with Reader/Plugin/Draft ids only.
-- [ ] **Log inspection:** search the CLI JSON logs and server stdout for a sentinel string placed in Draft code or config.
-  - Good: the sentinel never appears.
+- [ ] **Invalid Draft (spec check 10).** Through the CLI and the API, save a Draft whose PEP 723 block has `feedparser>=6`, then promote it.
+  - The save succeeds. Promotion returns 422 from the API (exit 1 from the CLI) with a field error under `code[main.py].dependencies`.
+  - Draft, Revision count and current pointer are unchanged.
+  - `plugin_draft.rejected` (`reason=invalid_implementation`, field codes only) appears in `docker logs` or the CLI log file, with no `feedparser` or source text.
+- [ ] **Corrected promotion (spec check 10).** Pin `feedparser==6.0.11`, save and promote.
+  - The API returns 201 (CLI exit 0). The new Revision is numbered max+1 and is current.
+  - Only that Draft is gone, and Bindings stay on their pinned Revisions.
+  - `plugin_draft.promoted` shows the Reader, Plugin, Draft, parent and Revision ids.
+- [ ] **Stale workspace (spec check 11).** Export a Draft, update it through the API, then run `draft promote --directory` on the stale workspace.
+  - The command returns a conflict naming both versions, with nothing on stdout, and no content is overwritten.
+  - `plugin_draft.conflict` is logged with `operation=promote`.
+- [ ] **Older-parent confirmation.** Select an older Revision, then promote a Draft whose parent is not current.
+  - Without `--confirm-current` (`expected_current_revision_id`), the result is a 409 `confirmation_required`.
+  - With it, the promotion succeeds and the code is copied as-is.
+  - With a stale confirmation, the result is a 409 `stale_current_selection`.
+- [ ] **Overlapping promotions (the `61712d1` fix).** Send two concurrent POSTs to `/readers/{r}/plugins/{p}/drafts/{d}/promote` for sibling Drafts.
+  - One returns 201, and the other returns 409 `stale_current_selection` with `actual_current_revision_id` set to the winner.
+  - `GET .../revisions` shows distinct numbers, and the losing Draft still exists.
+  - The logs have `plugin_draft.conflict` and **no** `api.database_failed` for that request.
+  - Repeat on Postgres (ticket 21). The second request should wait briefly and then return 409, with no deadlock and no 503.
+- [ ] **History and selection (spec check 11).** Compare `news plugin revision list` with the `GET .../revisions` body.
+  - They match.
+  - Selecting an older Revision creates no Revision and leaves Bindings unchanged.
+  - Selecting another Plugin's Revision or a foreign one returns 422 on `revision_id` with no change.
+- [ ] **No deletion surface.** `/openapi.json` has no delete or archive route for Plugin Revisions, and `news plugin revision --help` lists no delete command.
