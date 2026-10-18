@@ -218,6 +218,53 @@ def test_an_adr_listed_twice_is_a_problem() -> None:
     assert check(CONSISTENT_FILES, index) == ["README.md: 0002: listed 2 times"]
 
 
+@pytest.mark.parametrize("trailing_pipe", [True, False])
+def test_a_duplicate_row_without_a_leading_pipe_is_a_problem(trailing_pipe: bool) -> None:
+    duplicate = a_row(FIRST[0], "Use SQLite", amended_by="0002").removeprefix("|")
+    if not trailing_pipe:
+        duplicate = duplicate.removesuffix("|")
+
+    assert check(CONSISTENT_FILES, CONSISTENT_INDEX + duplicate + "\n") == [
+        "README.md: 0001: listed 2 times"
+    ]
+
+
+@pytest.mark.parametrize(
+    ("row", "problem"),
+    [
+        (
+            a_row("0003-gone.md", "Gone"),
+            "0003: no ADR file",
+        ),
+        (
+            "| malformed |",
+            "row: 'malformed |' does not have 4 cells",
+        ),
+    ],
+)
+def test_invalid_rows_without_a_leading_pipe_are_reported(row: str, problem: str) -> None:
+    index = CONSISTENT_INDEX + row.removeprefix("|") + "\n"
+
+    assert check(CONSISTENT_FILES, index) == [f"README.md: {problem}"]
+
+
+@pytest.mark.parametrize("header", [True, False])
+def test_consistent_index_rows_can_omit_leading_pipes(header: bool) -> None:
+    lines = CONSISTENT_INDEX.splitlines()
+    if not header:
+        lines.remove("| # | Decision | Status | Amended by |")
+    index = "\n".join(line.removeprefix("|") for line in lines)
+
+    assert check(CONSISTENT_FILES, index) == []
+
+
+def test_prose_with_pipes_outside_the_index_table_is_ignored() -> None:
+    index = "Use a pipe | to separate cells.\n\n" + CONSISTENT_INDEX
+    index += "\nOuter pipes | are optional.\n"
+
+    assert check(CONSISTENT_FILES, index) == []
+
+
 @pytest.mark.parametrize(
     ("first_row", "problem"),
     [
@@ -415,3 +462,17 @@ def test_the_script_rejects_a_missing_directory(
 
     assert main([str(missing)]) == 1
     assert capsys.readouterr().err == f"{missing}: not a directory\n"
+
+
+def test_the_script_reports_a_duplicate_without_a_leading_pipe(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    for filename, text in CONSISTENT_FILES.items():
+        (tmp_path / filename).write_text(text)
+    duplicate = a_row(FIRST[0], "Use SQLite", amended_by="0002").removeprefix("|")
+    (tmp_path / "README.md").write_text(CONSISTENT_INDEX + duplicate + "\n")
+
+    assert main([str(tmp_path)]) == 1
+    captured = capsys.readouterr()
+    assert captured.err == f"{tmp_path}/README.md: 0001: listed 2 times\n"
+    assert captured.out == ""
