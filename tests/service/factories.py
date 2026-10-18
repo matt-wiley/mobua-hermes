@@ -4,8 +4,8 @@ import uuid
 
 from sqlalchemy.orm import Session
 
+from news.service.manifest import parse_manifest
 from news.service.models import Plugin, PluginRevision, Reader
-from news.service.plugins import create_plugin
 from news.service.readers import create_reader
 from news.service.revisions import creator_of
 
@@ -40,7 +40,21 @@ def a_reader(session: Session, name: str = "Ada") -> Reader:
 def a_plugin_revision(
     session: Session, reader: Reader, manifest: str = URL_PLUGIN_MANIFEST
 ) -> PluginRevision:
-    return create_plugin(session, reader.id, manifest, {"main.py": "print('hi')"})
+    """A pre-Draft implementation fixture; promotion belongs to ticket 04."""
+    plugin = Plugin(id=uuid.uuid7(), reader_id=reader.id, name=parse_manifest(manifest).name)
+    revision = PluginRevision(
+        id=uuid.uuid7(),
+        plugin_id=plugin.id,
+        reader_id=reader.id,
+        number=1,
+        manifest=manifest,
+        code={"main.py": "print('hi')"},
+        created_by=str(reader.id),
+    )
+    session.add_all([plugin, revision])
+    plugin.current_revision = revision
+    session.flush()
+    return revision
 
 
 def a_built_in_plugin_revision(session: Session) -> PluginRevision:

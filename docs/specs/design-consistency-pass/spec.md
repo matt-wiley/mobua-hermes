@@ -18,6 +18,7 @@ adrs:
   - docs/adr/0014-own-db-driven-scheduler.md
   - docs/adr/0024-plugin-drafts-and-permanent-revision-history.md
   - docs/adr/0025-built-in-plugin-identities-and-global-lineage.md
+  - docs/adr/0026-interim-two-file-plugin-workspaces.md
 external: null
 ---
 
@@ -127,11 +128,20 @@ Model Health and normal Gateway usage accounting.
 - D-68: Preserve existing Reader Plugin Revision ids, numbering, contents, current selections, and Bindings on migration. Apply starter initialization only to new Reader-owned Plugins, without inventing historical parents. (branch 34)
 - D-69: Deliver Draft workspace/promotion/history before the process runner; deliver full Test Runs after the real runner, limits, Gateway, call-driven Model Health, accounting, and budgets. Pull exact-pin validation into promotion and call-driven Model Health into the Gateway ticket; periodic checks remain with the scheduler. (branch 35; consolidation instruction)
 
+### Interim workspace file amendment
+
+Added 2026-10-17 after the ticket 03 review found that saves read every file in the workspace
+folder, so `.DS_Store` and `__pycache__` broke them. It is governed by
+[ADR 0026](../../adr/0026-interim-two-file-plugin-workspaces.md) and qualifies D-63 until a
+Plugin design session decides the Plugin file model.
+
+- D-70: A CLI workspace holds exactly `implementation/manifest.toml` and `implementation/main.py`. Save reads only those two regular files and ignores everything else in the folder; deleting `main.py` saves an empty code set. Export refuses a Draft whose saved code has other files rather than dropping them. Storage, services, and the API keep the code-path map unchanged. ([ADR 0026](../../adr/0026-interim-two-file-plugin-workspaces.md)) (user decision, 2026-10-17)
+
 ## Scope and non-goals
 **In scope:**
 - Service-layer behavior and data model for D-2 through D-7, D-13 through D-16, D-18, D-23, and D-25 through D-34, with CLI commands for the operations a Reader performs: binding, upgrading Bindings, ejecting, and setting budgets, caps, the time zone, and Provider tests.
 - The Plugin Run launcher hardening (D-5).
-- Reader-owned Plugin Draft lifecycle, permanent Revision history, stale-version protection, CLI file editing, API surfaces, and ephemeral foreground Test Runs (D-35 through D-69).
+- Reader-owned Plugin Draft lifecycle, permanent Revision history, stale-version protection, CLI file editing, API surfaces, and ephemeral foreground Test Runs (D-35 through D-70).
 - Gateway accounting: budgets, call records, metrics, Model Health, and Model Attribution.
 - Validation rules on save: Binding config, Channel Models, cadences, Retention Window, and pinned dependencies.
 - A docs consistency check runnable locally (AC-56). D-17, D-19, D-20, and D-21 are already done.
@@ -249,7 +259,7 @@ Model Health and normal Gateway usage accounting.
 - AC-60: Creating a new Reader-owned Plugin produces current starter Revision 1, which emits zero News Items and exits 0. Upgrading a pre-Draft database preserves existing Plugin/Revision ids, numbers, contents, current pointers, and Bindings; it adds no artificial starter or inferred parent relationships to existing history.
 - AC-61: A Reader can create/list many Drafts from any existing Revision of their own Plugin. Each starts with copied Manifest/code and exactly that same-Plugin parent. Unknown, foreign-Reader, wrong-Plugin, and Built-in targets are rejected without changes.
 - AC-62: Saving a Draft with invalid TOML, unfinished code, or unpinned dependencies succeeds and preserves that text without creating a Revision, moving the Plugin current pointer, or changing Bindings. List/read/save API and CLI operations expose the same saved contents and enforce Reader scope.
-- AC-63: CLI export writes the Draft Manifest/code and version marker to a local workspace. Explicit save imports the edited files, including removals, only if the expected Draft version matches, then advances the marker/version. A stale CLI or API save returns a conflict and leaves stored contents unchanged. Test/Promote use saved database contents, not unsaved local files.
+- AC-63: CLI export writes the Draft Manifest/code and version marker to a local workspace. Explicit save imports the edited Manifest and `main.py`, including removal of `main.py`, and ignores other files in the workspace (D-70), only if the expected Draft version matches, then advances the marker/version. A stale CLI or API save returns a conflict and leaves stored contents unchanged. Test/Promote use saved database contents, not unsaved local files.
 - AC-64: A Reader can permanently delete their unpromoted Draft through CLI/API; foreign-Reader attempts fail. Draft deletion leaves all Revisions, Bindings, and local exported files unchanged.
 - AC-65: Valid promotion atomically creates a new immutable Reader-created Revision, makes it current, and deletes only the promoted Draft. Invalid Manifest/dependency pins, a stale expected Draft version, or transaction failure leaves Draft contents, Revision counts, current pointer, and Bindings unchanged. Check state before rollback and committed state where applicable.
 - AC-66: Promoting two Drafts based on the same parent produces two new Revisions retaining that parent, with distinct monotonically allocated numbers even after a current-pointer rollback. Sibling Drafts remain editable. An older-parent promotion requires explicit confirmation of the expected current selection and copies the Draft as-is without merging; a changed current selection requires reconfirmation.
@@ -300,7 +310,7 @@ Model Health and normal Gateway usage accounting.
   - the Prometheus registry;
   - the clock;
   - the CLI (Typer) and API (FastAPI).
-  - Draft file export/import and version markers; surface-owned commit/response ordering;
+  - Draft file export/import (Manifest and `main.py` only, D-70) and version markers; surface-owned commit/response ordering;
   - ephemeral execution input capture, process-tree cancellation, token revocation, and temporary cleanup.
 - **Test seams:**
   - the clock is injected (AC-26, AC-32, AC-43–47);
@@ -355,6 +365,7 @@ Model Health and normal Gateway usage accounting.
 - [ ] Run the docs consistency check (AC-56) on the deployed commit: exit 0.
 - [ ] Open a PR and confirm the core CI workflow runs every step and passes. A branch with a broken ADR index fails the docs-check step.
 - [ ] CLI/API: create a new Reader Plugin, export/save an invalid Draft, then try promotion. Saving succeeds; promotion reports field errors with unchanged Draft/Revisions/current pointer. Correct/save/promote it: a new permanent Revision becomes current and only that Draft disappears; inspect the assigned safe events in the CLI log or server stdout.
+- [ ] Export a Draft on macOS, open `implementation/` in Finder and run `main.py` once, then edit `main.py` and save. Saving succeeds despite `.DS_Store` and `__pycache__/`, and the saved Draft's code holds only `main.py`. Exporting a Draft saved through the API with an extra code file fails with an actionable error and creates no directory.
 - [ ] Export a Draft, update it through the API, then save/promote the stale workspace version: receive a conflict and observe no overwritten content. Reconcile explicitly. View the Revision tree and select an older Revision; existing Channel Bindings remain unchanged.
 - [ ] Test a saved Draft using a selected Channel without creating a Binding. Output appears only to the caller; Feed, Channel config/schedule/lease/Health stay unchanged. Inspect usage records for test_run and Plugin/Draft tags and verify real token consumption/refusals and Model Health behavior. No test artifacts remain after completion.
 - [ ] Start a test that waits, then interrupt the CLI and disconnect an API client in separate trials. Confirm subprocesses terminate, scoped tokens stop working, temporary directories disappear, and incurred Gateway usage remains.

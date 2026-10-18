@@ -3,7 +3,7 @@
 Status: Accepted
 Date: 2026-10-17
 Amends: ADRs 0012, 0016, 0018, 0019, 0021, 0023
-Amended by: ADR 0025
+Amended by: ADRs 0025, 0026
 
 ## Context
 
@@ -48,6 +48,7 @@ Eject initialization remain in effect.
   Channel Revisions directly.
 - Shared services expose the complete workflow through CLI and API; Web App screens follow
   when the frontend exists. CLI editing uses explicit export/edit/save of local files.
+  (Workspace file set: amended by ADR 0026, which limits it to the Manifest and `main.py`.)
   Test and Promote operate on the saved database Draft; deleting it leaves local files alone.
 - Draft exports carry a version marker. Save and Promote require the expected version;
   stale requests fail with a conflict and change neither Drafts nor Revisions/current pointers.

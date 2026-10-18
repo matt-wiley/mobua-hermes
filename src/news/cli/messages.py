@@ -4,9 +4,11 @@ from pathlib import Path
 
 from news.service.channels import ChannelNotFound
 from news.service.credentials import SecretNotFound
+from news.service.drafts import DraftNotFound
 from news.service.encryption import EncryptionError
 from news.service.readers import ReaderNotFound
 from news.service.validation import ValidationRejected
+from news.service.workspaces import WorkspaceError
 
 # Failures caused by the user's input; the service layer logs them where they are raised.
 EXPECTED_FAILURES = (
@@ -15,6 +17,8 @@ EXPECTED_FAILURES = (
     ReaderNotFound,
     SecretNotFound,
     EncryptionError,
+    DraftNotFound,
+    WorkspaceError,
 )
 
 

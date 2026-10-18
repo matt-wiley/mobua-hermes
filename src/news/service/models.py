@@ -117,11 +117,28 @@ class PluginRevision(Base):
     # Copied from the Plugin so the row is scoped on its own; empty for Built-in Plugins.
     reader_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("reader.id"), index=True)
     number: Mapped[int]
+    # No FK: global Built-in ancestry may refer to implementations absent locally (ADR 0025).
+    # Reader-owned parent eligibility is enforced by the service. Legacy ancestry is unknown.
+    parent_revision_id: Mapped[uuid.UUID | None]
     manifest: Mapped[str] = mapped_column(Text)
     code: Mapped[dict[str, str]] = mapped_column(JSON)
     # A Reader id, or "system" for seeded Built-in Plugin Revisions. Provenance only.
     created_by: Mapped[str]
     note: Mapped[str | None]
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+
+
+class PluginDraft(Base):
+    __tablename__ = "plugin_draft"
+    __table_args__ = scoped("reader")
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid7)
+    reader_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("reader.id"), index=True)
+    plugin_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("plugin.id"), index=True)
+    parent_revision_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("plugin_revision.id"))
+    version: Mapped[int] = mapped_column(default=1)
+    manifest: Mapped[str] = mapped_column(Text)
+    code: Mapped[dict[str, str]] = mapped_column(JSON)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
 
 
