@@ -266,6 +266,71 @@ def test_prose_with_pipes_outside_the_index_table_is_ignored() -> None:
 
 
 @pytest.mark.parametrize(
+    "following_block",
+    [
+        "# Further reading\nalpha | beta\n",
+        "### Operational notes | appendix\nalpha | beta\n",
+        "   ###### Details\nalpha | beta\n",
+        "> alpha | beta\n",
+        "> A quotation\n> alpha | beta\n",
+        "- alpha | beta\n",
+        "+ alpha | beta\n",
+        "* alpha | beta\n",
+        "1. alpha | beta\n",
+        "2) alpha | beta\n",
+        "***\nalpha | beta\n",
+        "<div>\nalpha | beta\n</div>\n",
+        "<!-- alpha | beta -->\n",
+        "```text\nalpha | beta\n```\n",
+        "~~~~text\nalpha | beta\n~~~~\n",
+    ],
+)
+def test_a_new_markdown_block_ends_the_index_table(following_block: str) -> None:
+    assert check(CONSISTENT_FILES, CONSISTENT_INDEX + following_block) == []
+
+
+@pytest.mark.parametrize("newline", ["\n", "\r\n", "\r"])
+def test_block_boundaries_accept_markdown_line_endings(newline: str) -> None:
+    index = CONSISTENT_INDEX + "## Context\nleft | right\n"
+
+    assert check(CONSISTENT_FILES, index.replace("\n", newline)) == []
+
+
+def test_a_duplicate_in_another_block_is_still_reported() -> None:
+    duplicate = a_row(FIRST[0], "Use SQLite", amended_by="0002").removeprefix("|")
+    index = CONSISTENT_INDEX + f"## More decisions\n{duplicate}\n"
+
+    assert check(CONSISTENT_FILES, index) == ["README.md: 0001: listed 2 times"]
+
+
+@pytest.mark.parametrize(
+    "row",
+    [
+        "| [0002](0002-allow-postgres.md) | Allow Postgres | Accepted |",
+        "| [0002](0002-allow-postgres.md) | Allow Postgres | Accepted | | extra |",
+    ],
+)
+def test_markdown_cell_normalization_cannot_hide_malformed_rows(row: str) -> None:
+    index = CONSISTENT_INDEX + row + "\n"
+
+    assert check(CONSISTENT_FILES, index) == [f"README.md: row: {row!r} does not have 4 cells"]
+
+
+def test_the_script_accepts_an_index_followed_by_another_markdown_block(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    for filename, text in CONSISTENT_FILES.items():
+        (tmp_path / filename).write_text(text)
+    index = CONSISTENT_INDEX + "## Additional context\nSeparate words | with a pipe.\n"
+    (tmp_path / "README.md").write_text(index)
+
+    assert main([str(tmp_path)]) == 0
+    captured = capsys.readouterr()
+    assert captured.err == ""
+    assert "2 ADRs and index are consistent" in captured.out
+
+
+@pytest.mark.parametrize(
     ("first_row", "problem"),
     [
         (
