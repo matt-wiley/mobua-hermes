@@ -20,7 +20,7 @@ AMENDMENTS = re.compile(r"ADRs? (\d{4}(?:, \d{4})*)")
 ISO_DATE = re.compile(r"\d{4}-\d{2}-\d{2}")
 INDEX_LINK = re.compile(r"\[(\d{4})\]\(([^)]+)\)")
 INDEX_NUMBERS = re.compile(r"(?:\d{4}(?:, \d{4})*)?")
-SEPARATOR_ROW = re.compile(r"\|[-:| ]+\|")
+SEPARATOR_ROW = re.compile(r"[-:| ]+")
 
 
 @dataclass(frozen=True)
@@ -168,7 +168,21 @@ def _index_problems(index: str, adrs: Mapping[str, Adr]) -> list[str]:
 
 def _table_rows(index: str) -> Iterator[str]:
     """Table lines, without the header and separator rows."""
-    table = [line.strip() for line in index.splitlines() if line.strip().startswith("|")]
+    table: list[str] = []
+    in_table = False
+    for line in index.splitlines():
+        row = line.strip()
+        if not row:
+            in_table = False
+            continue
+        if "|" in row and (
+            in_table
+            or row.startswith("|")
+            or INDEX_LINK.match(row)
+            or row.split("|", 1)[0].strip() == "#"
+        ):
+            table.append(row)
+            in_table = True
     if table and [cell.strip() for cell in table[0].strip("|").split("|")] == [
         "#",
         "Decision",
